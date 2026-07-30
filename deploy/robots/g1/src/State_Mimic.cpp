@@ -37,7 +37,9 @@ Eigen::Quaternionf motion_anchor_quat_w(std::shared_ptr<State_Mimic::MotionLoade
     const auto joint_pos = loader->joint_pos();
     // 使用动态解析的模型顺序腰部关节索引
     Eigen::Quaternionf torso_quat = root_quat \
-        * Eigen::AngleAxisf(joint_pos[12], Eigen::Vector3f::UnitZ()) ;
+        * Eigen::AngleAxisf(joint_pos[12], Eigen::Vector3f::UnitZ()) \
+        * Eigen::AngleAxisf(joint_pos[13], Eigen::Vector3f::UnitX()) \
+        * Eigen::AngleAxisf(joint_pos[14], Eigen::Vector3f::UnitY());
     //    * Eigen::AngleAxisf(joint_pos[State_Mimic::waist_yaw_idx], Eigen::Vector3f::UnitZ()) \
     //    * Eigen::AngleAxisf(joint_pos[State_Mimic::waist_roll_idx], Eigen::Vector3f::UnitX()) \
     //    * Eigen::AngleAxisf(joint_pos[State_Mimic::waist_pitch_idx], Eigen::Vector3f::UnitY());
