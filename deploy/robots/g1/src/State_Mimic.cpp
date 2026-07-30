@@ -7,11 +7,6 @@
 static Eigen::Quaternionf init_quat;
 std::shared_ptr<State_Mimic::MotionLoader_> State_Mimic::motion = nullptr;
 
-// 静态成员定义：腰部关节索引（默认硬件顺序 12,13,14）
-int State_Mimic::waist_yaw_idx   = 12;
-int State_Mimic::waist_roll_idx  = 13;
-int State_Mimic::waist_pitch_idx = 14;
-
 
 Eigen::Quaternionf robot_quat_w(isaaclab::ManagerBasedRLEnv* env)
 {
@@ -35,22 +30,29 @@ Eigen::Quaternionf motion_anchor_quat_w(std::shared_ptr<State_Mimic::MotionLoade
 {
     const auto root_quat = loader->root_quaternion();
     const auto joint_pos = loader->joint_pos();
-    // 使用动态解析的模型顺序腰部关节索引
+    // 从 MotionLoader_ 读取该策略自身的腰部关节索引
     Eigen::Quaternionf torso_quat = root_quat \
-        * Eigen::AngleAxisf(joint_pos[12], Eigen::Vector3f::UnitZ()) \
-        * Eigen::AngleAxisf(joint_pos[13], Eigen::Vector3f::UnitX()) \
-        * Eigen::AngleAxisf(joint_pos[14], Eigen::Vector3f::UnitY());
-    //    * Eigen::AngleAxisf(joint_pos[State_Mimic::waist_yaw_idx], Eigen::Vector3f::UnitZ()) \
-    //    * Eigen::AngleAxisf(joint_pos[State_Mimic::waist_roll_idx], Eigen::Vector3f::UnitX()) \
-    //    * Eigen::AngleAxisf(joint_pos[State_Mimic::waist_pitch_idx], Eigen::Vector3f::UnitY());
+        * Eigen::AngleAxisf(joint_pos[loader->waist_yaw_idx], Eigen::Vector3f::UnitZ()) \
+        * Eigen::AngleAxisf(joint_pos[loader->waist_roll_idx], Eigen::Vector3f::UnitX()) \
+        * Eigen::AngleAxisf(joint_pos[loader->waist_pitch_idx], Eigen::Vector3f::UnitY());
+
+    //std::cout << "waist_yaw_idx: " << loader->waist_yaw_idx << std::endl;
+    //std::cout << "waist_roll_idx: " << loader->waist_roll_idx << std::endl;
+    //std::cout << "waist_pitch_idx: " << loader->waist_pitch_idx << std::endl;
+
 
 //    return root_quat;
     return torso_quat;
 }
 
-/// 从 ONNX 模型的 joint_names metadata 中解析腰部关节索引
-static void load_waist_indices_from_onnx(const std::string& onnx_path)
+/// 从 ONNX 模型的 joint_names metadata 中解析腰部关节索引，写入 MotionLoader_
+static void load_waist_indices_from_onnx(const std::string& onnx_path,
+                                          std::shared_ptr<State_Mimic::MotionLoader_> loader)
 {
+    // 默认值（硬件顺序）
+    int yaw = 12, roll = 13, pitch = 14;
+    bool found = false;
+
     try {
         Ort::Env env(ORT_LOGGING_LEVEL_WARNING, "waist_idx_reader");
         Ort::SessionOptions session_options;
@@ -59,58 +61,41 @@ static void load_waist_indices_from_onnx(const std::string& onnx_path)
         auto model_metadata = session.GetModelMetadata();
         Ort::AllocatorWithDefaultOptions allocator;
 
-        // 读取 joint_names 元数据
         auto joint_names_str = model_metadata.LookupCustomMetadataMapAllocated("joint_names", allocator);
-        if (!joint_names_str) {
-            State_Mimic::waist_yaw_idx   = 12;
-            State_Mimic::waist_roll_idx  = 13;
-            State_Mimic::waist_pitch_idx = 14;
-            spdlog::warn("[waist_idx] joint_names not found in ONNX metadata, using defaults (12,13,14)");
-            return;
-        }
+        if (joint_names_str) {
+            std::string names_str(joint_names_str.get());
+            std::vector<std::string> joint_names;
+            size_t start = 0, end;
+            while ((end = names_str.find(',', start)) != std::string::npos) {
+                joint_names.push_back(names_str.substr(start, end - start));
+                start = end + 1;
+            }
+            joint_names.push_back(names_str.substr(start));
 
-        std::string names_str(joint_names_str.get());
-        std::vector<std::string> joint_names;
-        size_t start = 0, end;
-        while ((end = names_str.find(',', start)) != std::string::npos) {
-            joint_names.push_back(names_str.substr(start, end - start));
-            start = end + 1;
-        }
-        joint_names.push_back(names_str.substr(start));
-
-        // 查找腰部关节
-        bool found_yaw = false, found_roll = false, found_pitch = false;
-        for (size_t i = 0; i < joint_names.size(); ++i) {
-            const auto& name = joint_names[i];
-            if (name == "waist_yaw_joint") {
-                State_Mimic::waist_yaw_idx = i;
-                found_yaw = true;
-            } else if (name == "waist_roll_joint") {
-                State_Mimic::waist_roll_idx = i;
-                found_roll = true;
-            } else if (name == "waist_pitch_joint") {
-                State_Mimic::waist_pitch_idx = i;
-                found_pitch = true;
+            for (size_t i = 0; i < joint_names.size(); ++i) {
+                const auto& name = joint_names[i];
+                if (name == "waist_yaw_joint")   { yaw = i;   found = true; }
+                if (name == "waist_roll_joint")  { roll = i;  found = true; }
+                if (name == "waist_pitch_joint") { pitch = i; found = true; }
             }
         }
-
-        if (found_yaw && found_roll && found_pitch) {
-            spdlog::info("[waist_idx] Resolved from ONNX: yaw={}, roll={}, pitch={}",
-                         State_Mimic::waist_yaw_idx,
-                         State_Mimic::waist_roll_idx,
-                         State_Mimic::waist_pitch_idx);
-        } else {
-            // 回退到默认
-            State_Mimic::waist_yaw_idx   = 12;
-            State_Mimic::waist_roll_idx  = 13;
-            State_Mimic::waist_pitch_idx = 14;
-            spdlog::warn("[waist_idx] Could not find all waist joints in ONNX metadata, using defaults");
-        }
     } catch (const std::exception& e) {
-        State_Mimic::waist_yaw_idx   = 12;
-        State_Mimic::waist_roll_idx  = 13;
-        State_Mimic::waist_pitch_idx = 14;
-        spdlog::warn("[waist_idx] Failed to read ONNX metadata: {}, using defaults (12,13,14)", e.what());
+        spdlog::warn("[waist_idx] Failed to read ONNX metadata: {}", e.what());
+    }
+
+    // 写入 loader（每个策略各自的 MotionLoader_）
+    loader->waist_yaw_idx   = yaw;
+    loader->waist_roll_idx  = roll;
+    loader->waist_pitch_idx = pitch;
+
+    if (found) {
+        spdlog::info("[waist_idx] '{}' → yaw={}, roll={}, pitch={}",
+                     onnx_path.substr(onnx_path.find_last_of('/') + 1),
+                     yaw, roll, pitch);
+    } else {
+        spdlog::warn("[waist_idx] '{}' → joint_names not found, using defaults ({},{},{})",
+                     onnx_path.substr(onnx_path.find_last_of('/') + 1),
+                     yaw, roll, pitch);
     }
 }
 
@@ -277,8 +262,8 @@ State_Mimic::State_Mimic(int state_mode, std::string state_string)
     auto onnx_path = policy_dir / "exported" / "policy.onnx";
     env->alg = std::make_unique<isaaclab::OrtRunner>(onnx_path);
 
-    // 从 ONNX metadata 动态解析腰部关节索引（兼容不同 joint_names 顺序的策略）
-    load_waist_indices_from_onnx(onnx_path.string());
+    // 从 ONNX metadata 动态解析腰部关节索引，写入该策略的 MotionLoader_
+    load_waist_indices_from_onnx(onnx_path.string(), motion_);
 
     const auto & joy = FSMState::lowstate->joystick;
     this->registered_checks.emplace_back(
@@ -297,13 +282,14 @@ State_Mimic::State_Mimic(int state_mode, std::string state_string)
 
 void State_Mimic::enter()
 {
-    // set gain
+    // set gain (通过 joint_ids_map 将模型顺序重映射到硬件顺序)
     for (int i = 0; i < env->robot->data.joint_stiffness.size(); i++)
     {
-        lowcmd->msg_.motor_cmd()[i].kp() = env->robot->data.joint_stiffness[i];
-        lowcmd->msg_.motor_cmd()[i].kd() = env->robot->data.joint_damping[i];
-        lowcmd->msg_.motor_cmd()[i].dq() = 0;
-        lowcmd->msg_.motor_cmd()[i].tau() = 0;
+        int hw_idx = static_cast<int>(env->robot->data.joint_ids_map[i]);
+        lowcmd->msg_.motor_cmd()[hw_idx].kp() = env->robot->data.joint_stiffness[i];
+        lowcmd->msg_.motor_cmd()[hw_idx].kd() = env->robot->data.joint_damping[i];
+        lowcmd->msg_.motor_cmd()[hw_idx].dq() = 0;
+        lowcmd->msg_.motor_cmd()[hw_idx].tau() = 0;
     }
 
     motion = motion_; // set for specific motion

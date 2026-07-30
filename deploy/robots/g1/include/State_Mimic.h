@@ -23,11 +23,6 @@ public:
 
     static std::shared_ptr<MotionLoader_> motion; // for obs computation
 
-    // 腰部关节在模型 joint_names 中的索引，从 ONNX metadata 动态解析
-    static int waist_yaw_idx;
-    static int waist_roll_idx;
-    static int waist_pitch_idx;
-
 private:
     std::unique_ptr<isaaclab::ManagerBasedRLEnv> env;
     std::shared_ptr<MotionLoader_> motion_; // for saving
@@ -126,6 +121,11 @@ public:
     Eigen::VectorXf joint_vel() {
         return dof_velocities[frame];
     }
+
+    // 腰部关节在模型 joint_names 中的索引（默认硬件顺序 12,13,14）
+    int waist_yaw_idx   = 12;
+    int waist_roll_idx  = 13;
+    int waist_pitch_idx = 14;
 
     float dt;
     int num_frames;

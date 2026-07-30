@@ -14,13 +14,14 @@ public:
     
     void enter()
     {
-        // set gain
+        // set gain（通过 joint_ids_map 将模型顺序重映射到硬件顺序）
         for (int i = 0; i < env->robot->data.joint_stiffness.size(); ++i)
         {
-            lowcmd->msg_.motor_cmd()[i].kp() = env->robot->data.joint_stiffness[i];
-            lowcmd->msg_.motor_cmd()[i].kd() = env->robot->data.joint_damping[i];
-            lowcmd->msg_.motor_cmd()[i].dq() = 0;
-            lowcmd->msg_.motor_cmd()[i].tau() = 0;
+            int hw_idx = static_cast<int>(env->robot->data.joint_ids_map[i]);
+            lowcmd->msg_.motor_cmd()[hw_idx].kp() = env->robot->data.joint_stiffness[i];
+            lowcmd->msg_.motor_cmd()[hw_idx].kd() = env->robot->data.joint_damping[i];
+            lowcmd->msg_.motor_cmd()[hw_idx].dq() = 0;
+            lowcmd->msg_.motor_cmd()[hw_idx].tau() = 0;
         }
 
         env->robot->update();
