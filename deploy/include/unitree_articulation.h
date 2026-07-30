@@ -21,6 +21,21 @@ public:
     void update() override
     {
         std::lock_guard<std::mutex> lock(lowstate->mutex_);
+
+
+        // 调试输出原始 DDS 速度数据（前5个关节）
+        /*
+        static int call_count = 0;
+        call_count++;
+        if (call_count % 100 == 0) {
+            std::cout << "[DDS raw] joint_vel: ";
+            for (int i = 0; i < data.joint_ids_map.size(); ++i) {
+                std::cout << lowstate->msg_.motor_state()[i].dq() << " ";
+            }
+            std::cout << std::endl;
+        }
+        */
+
         // base_angular_velocity
         for(int i(0); i<3; i++) {
             data.root_ang_vel_b[i] = lowstate->msg_.imu_state().gyroscope()[i];

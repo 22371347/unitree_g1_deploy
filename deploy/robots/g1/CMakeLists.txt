@@ -3,6 +3,10 @@ project(g1_controller)
 
 set(CMAKE_CXX_STANDARD 17)
 
+# 用户修改
+set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} "/opt/unitree_robotics")
+link_directories(/opt/unitree_robotics/lib)
+
 find_package(Boost REQUIRED COMPONENTS program_options)
 find_package(yaml-cpp REQUIRED)
 find_package(ZLIB REQUIRED)

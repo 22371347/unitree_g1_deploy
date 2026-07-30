@@ -8,6 +8,8 @@
 #include <spdlog/spdlog.h>
 #include <yaml-cpp/yaml.h>
 
+#include "FSMState.h"
+
 class CtrlFSM
 {
 public:
@@ -87,6 +89,7 @@ private:
         
         // Check if need to change state
         int nextStateMode = 0;
+        //手柄输入修改为键盘检测
         for(int i(0); i<currentState->registered_checks.size(); i++)
         {
             if(currentState->registered_checks[i].first())
@@ -95,6 +98,23 @@ private:
                 break;
             }
         }
+        
+        
+        //增加键盘检测
+        std::string key = FSMState::keyboard->key();
+        if (!key.empty()) {
+            //spdlog::info("FSM: Keyboard input received: {}", key);
+            // 使用键盘字母键 a, b, c... 切换状态
+            if (key == "a") nextStateMode = 1;   // Passive
+            else if (key == "b") nextStateMode = 2; // FixStand
+            else if (key == "c") nextStateMode = 3; // Velocity
+            else if (key == "d") nextStateMode = 5; // Kungfu_1037
+            else if (key == "e") nextStateMode = 6; // ExampleState
+            else if (key == "f") nextStateMode = 7; // BeyondMimic
+            else if (key == "g") nextStateMode = 8; // BeyondMimic_nostate
+        }
+        
+        //nextStateMode = 6;
 
         if(nextStateMode != 0 && !currentState->isState(nextStateMode))
         {

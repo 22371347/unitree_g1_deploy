@@ -150,5 +150,16 @@ REGISTER_OBSERVATION(gait_phase)
     return obs;
 }
 
+REGISTER_OBSERVATION(time_step)
+{
+    // 返回当前环境步数或时间
+    //float time_step_value = static_cast<float>(env->episode_length);
+    //return std::vector<float>{time_step_value};
+    static float time_step_value = 0.0f;
+    time_step_value += 0.02f;  // 假设 step_dt = 0.02
+    return std::vector<float>{time_step_value};
+}
+
+
 }
 }

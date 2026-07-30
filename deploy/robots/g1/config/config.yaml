@@ -7,11 +7,21 @@ FSM:
     Velocity:
       id: 3
       type: RLBase
-
     Mimic_Dance1_subject2:
       id: 5
       type: Mimic
-
+    # ========== 新增：1037 武术策略 ==========
+    Kungfu_1037:
+      id: 6
+      type: Mimic
+      # type: RLBase  # 使用 RLBase 状态（ONNX推理）
+      # ======================================
+    BeyondMimic:
+      id: 7
+      type: Mimic
+    BeyondMimic_nostate:
+      id: 8
+      type: Mimic
 
   Passive:
     transitions: 
@@ -31,12 +41,10 @@ FSM:
       3,3,3,3,3,3,3,  
     ]
 
-
   FixStand:
     transitions: 
       Passive: LT + B.on_pressed
       Velocity: RT + A.on_pressed
-
     kp: [
       100,100,100,150,40,40,
       100,100,100,150,40,40,
@@ -62,21 +70,41 @@ FSM:
       ]
     ]
 
-
   Velocity:
     transitions: 
       Passive: LT + B.on_pressed
       Mimic_Dance1_subject2: RB + A.on_pressed
-
+      Kungfu_1037: RT + B.on_pressed
     policy_dir: config/policy/velocity
-
 
   Mimic_Dance1_subject2:
     transitions:
       Passive: LT + B.on_pressed
       Velocity: RT + A.on_pressed
-
     motion_file: config/policy/mimic/dance1_subject2/params/dance1_subject2.npz
     policy_dir: config/policy/mimic/dance1_subject2/
     time_start: 0.0
     time_end: 1000.0
+
+  # ========== 新增：1037 策略配置 ==========
+  Kungfu_1037:
+    transitions:
+      Passive: LT + B.on_pressed
+      Velocity: RT + A.on_pressed
+    motion_file: config/policy/kungfu_1037/params/1307.npz
+    policy_dir: config/policy/kungfu_1037/  # 指向您的策略文件夹
+    # ======================================
+
+  BeyondMimic:
+    transitions:
+      Passive: LT + B.on_pressed
+      Velocity: RT + A.on_pressed
+    motion_file: config/policy/beyondmimic/params/motion.npz
+    policy_dir: config/policy/beyondmimic/  # 指向您的策略文件夹
+
+  BeyondMimic_nostate:
+    transitions:
+      Passive: LT + B.on_pressed
+      Velocity: RT + A.on_pressed
+    motion_file: config/policy/beyondmimic_nostate/params/motion.npz
+    policy_dir: config/policy/beyondmimic_nostate/

@@ -28,7 +28,8 @@ Eigen::Quaternionf motion_anchor_quat_w(std::shared_ptr<State_Mimic::MotionLoade
     const auto root_quat = loader->root_quaternion();
     const auto joint_pos = loader->joint_pos();
     Eigen::Quaternionf torso_quat = root_quat \
-        * Eigen::AngleAxisf(joint_pos[12], Eigen::Vector3f::UnitZ());
+        * Eigen::AngleAxisf(joint_pos[12], Eigen::Vector3f::UnitZ());//调试用
+    //    * Eigen::AngleAxisf(joint_pos[2], Eigen::Vector3f::UnitZ());
 
 
 //    return root_quat;
