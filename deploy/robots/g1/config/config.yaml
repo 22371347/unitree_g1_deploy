@@ -22,6 +22,11 @@ FSM:
     BeyondMimic_nostate:
       id: 8
       type: Mimic
+    # ========== 新增：wbc_fsm WBC 策略 ==========
+    Wbc:
+      id: 9
+      type: Wbc
+      # ======================================
 
   Passive:
     transitions: 
@@ -45,6 +50,7 @@ FSM:
     transitions: 
       Passive: LT + B.on_pressed
       Velocity: RT + A.on_pressed
+      Wbc: RT + Y.on_pressed
     kp: [
       100,100,100,150,40,40,
       100,100,100,150,40,40,
@@ -108,3 +114,14 @@ FSM:
       Velocity: RT + A.on_pressed
     motion_file: config/policy/beyondmimic_nostate/params/motion.npz
     policy_dir: config/policy/beyondmimic_nostate/
+
+  # ========== 新增：wbc_fsm WBC 策略配置 ==========
+  Wbc:
+    transitions:
+      Passive: LT + B.on_pressed
+      FixStand: LT + up.on_pressed
+    motion_file: config/policy/wbc/params/motion.npz
+    policy_dir: config/policy/wbc/
+    start_idx: 0      # 参考轨迹起始帧
+    end_idx: -1       # -1 表示播放到运动末尾
+    # ==============================================

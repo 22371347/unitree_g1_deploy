@@ -112,6 +112,7 @@ private:
             else if (key == "e") nextStateMode = 6; // ExampleState
             else if (key == "f") nextStateMode = 7; // BeyondMimic
             else if (key == "g") nextStateMode = 8; // BeyondMimic_nostate
+            else if (key == "h") nextStateMode = 9; // Wbc
         }
         
         //nextStateMode = 6;
