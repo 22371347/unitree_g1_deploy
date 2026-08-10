@@ -10,6 +10,7 @@
 #include "isaaclab/assets/articulation/articulation.h"
 #include "isaaclab/algorithms/algorithms.h"
 #include <iostream>
+#include <atomic>
 #include "isaaclab/utils/utils.h"
 
 namespace isaaclab
@@ -84,7 +85,7 @@ public:
 
         if ((DEBUG_OBS_OUTPUT)&&(episode_length % 50 == 0)) {
         //if (DEBUG_OBS_OUTPUT) {
-            spdlog::info("=== OBS DEBUG (step {}) ===", episode_length);
+            spdlog::info("=== OBS DEBUG (step {}) ===", episode_length.load());
             spdlog::info("obs size: {}", obs.size());
             for (const auto& [group_name, group_obs] : obs) {
                 spdlog::info("Observation Group: '{}', Size: {}", group_name, group_obs.size());
@@ -138,8 +139,8 @@ public:
     std::unique_ptr<ActionManager> action_manager;
     std::shared_ptr<Articulation> robot;
     std::unique_ptr<Algorithms> alg;
-    long episode_length = 0;
+    std::atomic<long> episode_length{0};
     float global_phase = 0.0f;
-};
 
+};
 };

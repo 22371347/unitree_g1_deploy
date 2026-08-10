@@ -6,6 +6,7 @@
 #include "isaaclab/envs/manager_based_rl_env.h"
 #include "isaaclab/manager/manager_term_cfg.h"
 #include <numeric>
+#include <mutex>
 
 namespace isaaclab
 {
@@ -52,6 +53,7 @@ public:
 
     void reset()
     {
+        std::lock_guard<std::mutex> lock(mtx_);
         _action.assign(total_action_dim(), 0.0f);
         for(auto & term : _terms)
         {
@@ -61,11 +63,13 @@ public:
 
     std::vector<float> action()
     {
+        std::lock_guard<std::mutex> lock(mtx_);
         return _action;
     }
 
     std::vector<float> processed_actions()
     {
+        std::lock_guard<std::mutex> lock(mtx_);
         std::vector<float> actions;
         for(auto & term : _terms)
         {
@@ -77,6 +81,7 @@ public:
 
     void process_action(std::vector<float> action)
     {
+        std::lock_guard<std::mutex> lock(mtx_);
         _action = action;
         int idx = 0;
         for(auto & term : _terms)
@@ -122,6 +127,9 @@ private:
             _terms.push_back(std::move(term));
         }
     }
+
+    // 保护跨线程访问（策略线程写 / FSM 线程读）
+    mutable std::mutex mtx_;
 
     std::vector<float> _action;
     std::vector<std::unique_ptr<ActionTerm>> _terms;
