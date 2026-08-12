@@ -10,23 +10,6 @@ FSM:
     Mimic_Dance1_subject2:
       id: 5
       type: Mimic
-    # ========== 新增：1037 武术策略 ==========
-    Kungfu_1037:
-      id: 6
-      type: Mimic
-      # type: RLBase  # 使用 RLBase 状态（ONNX推理）
-      # ======================================
-    BeyondMimic:
-      id: 7
-      type: Mimic
-    BeyondMimic_nostate:
-      id: 8
-      type: Mimic
-    # ========== 新增：wbc_fsm WBC 策略 ==========
-    Wbc:
-      id: 9
-      type: Wbc
-      # ======================================
 
   Passive:
     transitions: 
@@ -79,69 +62,14 @@ FSM:
     transitions: 
       Passive: LT + B.on_pressed
       FixStand: LT + up.on_pressed
-      Wbc: RT + Y.on_pressed
       Mimic_Dance1_subject2: RB + A.on_pressed
-      Kungfu_1037: RB + B.on_pressed
-      #BeyondMimic: RB + X.on_pressed
-      BeyondMimic_nostate: RB + Y.on_pressed
     policy_dir: config/policy/velocity
 
   Mimic_Dance1_subject2:
     transitions:
       Passive: LT + B.on_pressed
       Velocity: RT + A.on_pressed
-      Wbc: RT + Y.on_pressed
-      Kungfu_1037: RB + B.on_pressed
-      #BeyondMimic: RB + X.on_pressed
-      BeyondMimic_nostate: RB + Y.on_pressed
     motion_file: config/policy/mimic/dance1_subject2/params/dance1_subject2.npz
     policy_dir: config/policy/mimic/dance1_subject2/
     time_start: 0.0
     time_end: 1000.0
-
-  # ========== 新增：1037 策略配置 ==========
-  Kungfu_1037:
-    transitions:
-      Passive: LT + B.on_pressed
-      Velocity: RT + A.on_pressed
-      Wbc: RT + Y.on_pressed
-      Mimic_Dance1_subject2: RB + A.on_pressed
-      #BeyondMimic: RB + X.on_pressed
-      BeyondMimic_nostate: RB + Y.on_pressed
-    motion_file: config/policy/kungfu_1037/params/1307.npz
-    policy_dir: config/policy/kungfu_1037/  # 指向您的策略文件夹
-    # ======================================
-
-  BeyondMimic:
-    transitions:
-      Passive: LT + B.on_pressed
-      Velocity: RT + A.on_pressed
-      Wbc: RT + Y.on_pressed
-      Mimic_Dance1_subject2: RB + A.on_pressed
-      Kungfu_1037: RB + B.on_pressed
-      BeyondMimic_nostate: RB + Y.on_pressed
-    motion_file: config/policy/beyondmimic/params/motion.npz
-    policy_dir: config/policy/beyondmimic/  # 指向您的策略文件夹
-
-  BeyondMimic_nostate:
-    transitions:
-      Passive: LT + B.on_pressed
-      Velocity: RT + A.on_pressed
-      Wbc: RT + Y.on_pressed
-      Mimic_Dance1_subject2: RB + A.on_pressed
-      Kungfu_1037: RB + B.on_pressed
-      #BeyondMimic: RB + X.on_pressed
-    motion_file: config/policy/beyondmimic_nostate/params/motion.npz
-    policy_dir: config/policy/beyondmimic_nostate/
-
-  # ========== 新增：wbc_fsm WBC 策略配置 ==========
-  Wbc:
-    transitions:
-      Passive: LT + B.on_pressed
-      FixStand: LT + up.on_pressed
-      Velocity: RT + A.on_pressed
-    motion_file: config/policy/wbc/params/motion.npz
-    policy_dir: config/policy/wbc/
-    start_idx: 0      # 参考轨迹起始帧
-    end_idx: -1       # -1 表示播放到运动末尾
-    # ==============================================
