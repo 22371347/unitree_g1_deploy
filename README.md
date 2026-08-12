@@ -143,44 +143,46 @@ python scripts/play.py Unitree-G1-Tracking-No-State-Estimation --motion_file=src
 |----------------------------------|--------------------------------|------------------------------------|-----------------------------------|
 | ![go2](doc/gif/go2-velocity.gif) | ![g1](doc/gif/g1-velocity.gif) | ![h1_2](doc/gif/h1_2-velocity.gif) | ![g1_mimic](doc/gif/g1-mimic.gif) |
 
-### 4. 策略部署与测试指南 (Deployment & Testing Guide)
+### 4. Deployment & Testing Guide
 
-> 下面以 G1 为例，所有路径均以**仓库根目录**为基准。先进入仓库根目录（下称 `<REPO>`）：
+> The following uses G1 as an example. All paths are relative to the **repository root**. First enter the repo root (referred to as `<REPO>`):
 > ```bash
-> cd <REPO>   # 例如 cd ~/g1_ws/unitree_rl_mjlab
+> cd <REPO>   # e.g. cd ~/g1_ws/unitree_rl_mjlab
 > ```
 
-#### 4.1 注册新策略（配置文件修改指南）
+#### 4.1 Registering a New Policy (Config File Guide)
 
-一个待部署的 ONNX 策略要接入本框架，一般需要完成以下 5 步：
+To integrate a new ONNX policy into this framework, generally complete the following 5 steps:
 
-1. **准备策略文件**：将训练导出的 `policy.onnx` 与 `policy.onnx.data` 放入
-   `deploy/robots/g1/config/policy/<策略名>/exported/`
-2. **编写部署配置** `deploy/robots/g1/config/policy/<策略名>/params/deploy.yaml`：
-   - `joint_ids_map`：模型关节顺序 → 硬件关节顺序 的重映射（长度 = 模型 DOF）
-   - `step_dt`：控制周期（如 `0.02` = 50Hz）
-   - `stiffness` / `damping` / `default_joint_pos`：关节刚度、阻尼、默认位置（按**模型顺序**给出）
-   - `actions`：动作配置（`target = action * scale + offset`）
-   - `observations`：观测项配置，**书写顺序即 ONNX 输入张量的拼接顺序，必须与训练一致**
-   - > ⚠️ 关节映射 / 观测顺序不匹配，是部署后动作异常的最常见原因。
-3. **注册 FSM 状态**：在 `deploy/robots/g1/config/config.yaml` 的 `FSM._` 中新增状态，指定**唯一 id** 与 `type`：
-   - `type: RLBase` —— 无参考轨迹的策略（如速度控制，对应 `State_RLBase`）
-   - `type: Mimic` —— 动作模仿策略，需额外提供 `motion_file`（对应 `State_Mimic`）
-   - `type: <自定义>` —— 观测逻辑差异较大时，见第 5 步
-4. **添加状态配置块**：配置 `transitions`（手柄切换条件）、`policy_dir`；Mimic 类型还需 `motion_file`、`time_start/end`
-5. **观测逻辑差异较大时**：在 `deploy/robots/g1/include/` 与 `deploy/robots/g1/src/` 下编写自定义
-   `State_<名字>.h/.cpp`（继承 `FSMState`，重写 `enter/run/exit` 与观测计算，用 `REGISTER_FSM` 注册），
-   并在 `deploy/robots/g1/main.cpp` 中 `#include` 对应头文件。
+1. **Prepare the policy files**: place the exported `policy.onnx` and `policy.onnx.data` into
+   `deploy/robots/g1/config/policy/<policy_name>/exported/`
+2. **Write the deployment config** `deploy/robots/g1/config/policy/<policy_name>/params/deploy.yaml`:
+   - `joint_ids_map`: remapping from model joint order → hardware joint order (length = model DOF)
+   - `step_dt`: control period (e.g. `0.02` = 50 Hz)
+   - `stiffness` / `damping` / `default_joint_pos`: joint gains and default positions (given in **model order**)
+   - `actions`: action config (`target = action * scale + offset`)
+   - `observations`: observation config; **the written order is the concatenation order of the ONNX input tensor and must match training**
+   - > ⚠️ A mismatch in joint mapping / observation order is the most common cause of abnormal behavior after deployment.
+3. **Register the FSM state**: add a new state in the `FSM._` section of `deploy/robots/g1/config/config.yaml`, with a **unique id** and `type`:
+   - `type: RLBase` — policies without a reference trajectory (e.g. velocity tracking, `State_RLBase`)
+   - `type: Mimic` — motion imitation; additionally requires `motion_file` (`State_Mimic`)
+   - `type: <custom>` — if the observation logic differs significantly, see step 5
+4. **Add the state config block**: configure `transitions` (gamepad triggers) and `policy_dir`; Mimic type also needs `motion_file` and `time_start/end`
+5. **Custom implementation for differing observation logic**: write `State_<name>.h/.cpp` under
+   `deploy/robots/g1/include/` and `deploy/robots/g1/src/` (inherit `FSMState`, override `enter/run/exit`
+   and observation computation, register with `REGISTER_FSM`), and `#include` the header in
+   `deploy/robots/g1/main.cpp`.
 
 > [!TIP]
-> `config.yaml` 内已内置完整的注册引导注释与两个可直接照抄的示例
-> （`Velocity` = RLBase 示例，`Mimic_Dance1_subject2` = Mimic 示例）。
+> `config.yaml` already contains a complete registration guide comment and two ready-to-copy examples
+> (`Velocity` = RLBase example, `Mimic_Dance1_subject2` = Mimic example).
 
-#### 4.2 Sim2Real：MuJoCo 仿真验证
+#### 4.2 Sim2Real: MuJoCo Simulation Validation
 
-上真机前先在 MuJoCo 仿真中验证策略。需要两个程序：仿真器 `unitree_mujoco` 与控制程序 `g1_ctrl`。
+Validate the policy in MuJoCo simulation before going to the real robot. Two programs are required: the
+simulator `unitree_mujoco` and the control program `g1_ctrl`.
 
-**编译控制程序**（以 G1 为例）：
+**Build the control program** (G1 as an example):
 
 ```bash
 cd deploy/robots/g1
@@ -189,7 +191,7 @@ cmake ..
 make -j$(nproc)
 ```
 
-**编译仿真器**：
+**Build the simulator**:
 
 ```bash
 cd simulate
@@ -198,77 +200,78 @@ cmake ..
 make -j$(nproc)
 ```
 
-**运行仿真**（需要连接手柄）：
+**Run the simulation** (a gamepad must be connected):
 
-终端 1 —— 启动仿真器：
+Terminal 1 — start the simulator:
 
 ```bash
 cd simulate/build
 ./unitree_mujoco
 ```
 
-终端 2 —— 启动控制程序：
+Terminal 2 — start the control program:
 
 ```bash
 cd deploy/robots/g1/build
 ./g1_ctrl -n lo
 ```
 
-进入后可通过键盘 `a` `b` `c` `d` 切换四个状态进行观测
-（`a`=Passive，`b`=FixStand，`c`=Velocity，`d`=Mimic_Dance1_subject2）。
+Once running, press the keyboard keys `a` `b` `c` `d` to switch between the four states for observation
+(`a`=Passive, `b`=FixStand, `c`=Velocity, `d`=Mimic_Dance1_subject2).
 
 > [!NOTE]
-> `-n` / `--network` 指定 DDS 网络接口。仿真时用 `lo`（本机回环）。
+> `-n` / `--network` specifies the DDS network interface. Use `lo` (loopback) for simulation.
 
-#### 4.3 实机部署
+#### 4.3 Real-Robot Deployment
 
-> 前置依赖：需先安装通信库
+> Prerequisites: install the communication libraries first
 > - [cyclonedds](https://github.com/eclipse-cyclonedds/cyclonedds.git)
 > - [unitree_sdk2](https://github.com/unitreerobotics/unitree_sdk2.git)
 
-**4.3.1 开机与调试模式**
-- 将机器人悬挂悬空启动，等待进入 `zero-torque`（零力矩）模式
-- 在零力矩模式下按手柄 `L2 + R2`，进入 `debug mode`（关节阻尼生效）
+**4.3.1 Power On & Debug Mode**
+- Power on the robot in a suspended state and wait until it enters `zero-torque` mode
+- While in `zero-torque` mode, press `L2 + R2` on the gamepad to enter `debug mode` (joint damping enabled)
 
-**4.3.2 网络连接**
-用网线连接 PC 与机器人，配置 IPv4：
-- 地址：`192.168.123.222`
-- 子网掩码：`255.255.255.0`
+**4.3.2 Network Connection**
+Connect the PC to the robot via Ethernet and configure IPv4:
+- Address: `192.168.123.222`
+- Netmask: `255.255.255.0`
 
-机器人默认地址通常为 `192.168.123.164`（以实际为准，可用 `ifconfig` / 宇树文档确认）。
+The robot default address is usually `192.168.123.164` (confirm with `ifconfig` / Unitree docs).
 
-**4.3.3 传输项目到机器人**
+**4.3.3 Transfer the Project to the Robot**
 
 ```bash
-ssh unitree@192.168.123.164        # 或对应的机器人地址
+ssh unitree@192.168.123.164        # or the corresponding robot address
 scp -r deploy unitree@192.168.123.164:~/
 ```
 
-**4.3.4 在机器人上编译并运行**
+**4.3.4 Build & Run on the Robot**
 
 ```bash
 ssh unitree@192.168.123.164
-cd ~/deploy/robots/g1              # 按实际 scp 路径调整
+cd ~/deploy/robots/g1              # adjust to the actual scp path
 rm -rf build && mkdir build && cd build
 cmake ..
 make -j$(nproc)
-./g1_ctrl -n lo
+./g1_ctrl
 ```
 
 > [!NOTE]
-> 若在机器人板载计算机内运行 `g1_ctrl`，DDS 走本机回环，一般用 `-n lo`；
-> 若通过网口与机器人通信（PC 直连运行），则改用对应网卡名（如 `-n enp5s0`，用 `ifconfig` 查看）。
+> When running `g1_ctrl` on the robot's onboard computer, no network parameter is needed (default DDS config).
+> For simulation on the PC, use `-n lo`; if connecting to the robot directly from the PC via Ethernet, use the
+> corresponding NIC name (e.g. `-n enp5s0`, check with `ifconfig`).
 
-#### 4.4 手柄操作指南
+#### 4.4 Gamepad Operation Guide
 
-| 当前状态 | 按键 | 目标状态 | 说明 |
+| Current State | Buttons | Target State | Description |
 |---------|------|---------|------|
-| Passive（阻尼模式） | `L2 + Up` | FixStand | 进入力矩/站立模式，调整机器人姿态至触地 |
-| FixStand | `R2 + A` | Velocity | 进入运控模式（速度控制） |
-| Velocity / FixStand | `R1 + A` | Mimic_Dance1_subject2 | 进入自定义动作（建议先取下背后挂钩） |
-| 任意状态 | `L2 + B` | Passive | 回到阻尼模式（**急停**） |
+| Passive (damping mode) | `L2 + Up` | FixStand | Enter torque/standing mode, adjust posture until feet touch the ground |
+| FixStand | `R2 + A` | Velocity | Enter motion control mode (velocity) |
+| Velocity / FixStand | `R1 + A` | Mimic_Dance1_subject2 | Play the custom motion |
+| Any state | `L2 + B` | Passive | Return to damping mode (**emergency stop**) |
 
-> 键盘辅助（仿真调试）：`a`=Passive，`b`=FixStand，`c`=Velocity，`d`=Mimic_Dance1_subject2
+> Keyboard shortcuts (simulation debugging): `a`=Passive, `b`=FixStand, `c`=Velocity, `d`=Mimic_Dance1_subject2
 
 **Deployment Results**：
 
