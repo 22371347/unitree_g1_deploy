@@ -36,17 +36,21 @@ FSM:
       id: 1
     FixStand:
       id: 2
-    # ---- 示例：新增一个策略状态（以 type: Mimic 为例）----
-    # MyNewPolicy:
-    #   id: 6          # 唯一 id，不要与现有 id 重复
-    #   type: Mimic    # RLBase / Mimic / 自定义 State 名
-    # --------------------------------------------------
     Velocity:
       id: 3
       type: RLBase
     Mimic_Dance1_subject2:
       id: 5
       type: Mimic
+    # AMP 运行策略：速度指令驱动 + 4帧历史观测，同 RLBase 类型
+    AMP:
+      id: 6
+      type: RLBase
+    # ---- 示例：再新增一个策略状态（以 type: Mimic 为例）----
+    # MyNewPolicy:
+    #   id: 9          # 唯一 id，不要与现有 id 重复
+    #   type: Mimic    # RLBase / Mimic / 自定义 State 名
+    # --------------------------------------------------
 
   Passive:
     transitions: 
@@ -103,6 +107,7 @@ FSM:
       Passive: LT + B.on_pressed
       FixStand: LT + up.on_pressed
       Mimic_Dance1_subject2: RB + A.on_pressed
+      AMP: RB + X.on_pressed
     policy_dir: config/policy/velocity
 
   # ---- 示例：Mimic 类型策略（动作模仿，需参考轨迹 npz）----
@@ -111,7 +116,17 @@ FSM:
     transitions:
       Passive: LT + B.on_pressed
       Velocity: RT + A.on_pressed
+      AMP: RB + X.on_pressed
     motion_file: config/policy/mimic/dance1_subject2/params/dance1_subject2.npz
     policy_dir: config/policy/mimic/dance1_subject2/
     time_start: 0.0
     time_end: 1000.0
+
+  # ---- AMP 运行策略（type: RLBase，速度指令驱动 + 4帧历史）----
+  # 手柄 RB + X 从 Velocity / Mimic 切入，速度用左摇杆 + 右摇杆 yaw 控制
+  AMP:
+    transitions:
+      Passive: LT + B.on_pressed
+      Velocity: RT + A.on_pressed
+      Mimic_Dance1_subject2: RB + A.on_pressed
+    policy_dir: config/policy/AMP
