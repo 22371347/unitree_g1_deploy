@@ -39,13 +39,22 @@ public:
 
         for (size_t i = 0; i < session->GetInputCount(); ++i) {
             Ort::TypeInfo input_type = session->GetInputTypeInfo(i);
-            input_shapes.push_back(input_type.GetTensorTypeAndShapeInfo().GetShape());
+            auto shape = input_type.GetTensorTypeAndShapeInfo().GetShape();
+            input_shapes.push_back(shape);
+
+            // 将动态维度（-1，如 batch）替换为 1，用于创建具体的输入张量
+            std::vector<int64_t> fixed_shape(shape.begin(), shape.end());
+            for (auto & dim : fixed_shape) {
+                if (dim < 0) dim = 1;
+            }
+            input_shapes_fixed.push_back(fixed_shape);
+
             auto input_name = session->GetInputNameAllocated(i, allocator);
             input_names.push_back(input_name.release());
         }
 
-        for (const auto& shape : input_shapes) {
-            size_t size = 1;
+        for (const auto& shape : input_shapes_fixed) {
+            int64_t size = 1;
             for (const auto& dim : shape) {
                 size *= dim;
             }
@@ -78,7 +87,7 @@ public:
         {
             const std::string name_str(input_names[i]);
             auto& input_data = obs.at(name_str);
-            auto input_tensor = Ort::Value::CreateTensor<float>(memory_info, input_data.data(), input_sizes[i], input_shapes[i].data(), input_shapes[i].size());
+            auto input_tensor = Ort::Value::CreateTensor<float>(memory_info, input_data.data(), input_sizes[i], input_shapes_fixed[i].data(), input_shapes_fixed[i].size());
             input_tensors.push_back(std::move(input_tensor));
         }
 
@@ -102,6 +111,7 @@ private:
     std::vector<const char*> output_names;
 
     std::vector<std::vector<int64_t>> input_shapes;
+    std::vector<std::vector<int64_t>> input_shapes_fixed; // 动态维度(-1)替换为1后的具体形状
     std::vector<int64_t> input_sizes;
     std::vector<int64_t> output_shape;
 };
