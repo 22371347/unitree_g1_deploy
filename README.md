@@ -143,82 +143,132 @@ python scripts/play.py Unitree-G1-Tracking-No-State-Estimation --motion_file=src
 |----------------------------------|--------------------------------|------------------------------------|-----------------------------------|
 | ![go2](doc/gif/go2-velocity.gif) | ![g1](doc/gif/g1-velocity.gif) | ![h1_2](doc/gif/h1_2-velocity.gif) | ![g1_mimic](doc/gif/g1-mimic.gif) |
 
-### 4. Real Deployment
+### 4. 策略部署与测试指南 (Deployment & Testing Guide)
 
-Before deployment, install the required communication tools:
-- [cyclonedds](https://github.com/eclipse-cyclonedds/cyclonedds.git)
-- [unitree_sdk2](https://github.com/unitreerobotics/unitree_sdk2.git)
+> 下面以 G1 为例，所有路径均以**仓库根目录**为基准。先进入仓库根目录（下称 `<REPO>`）：
+> ```bash
+> cd <REPO>   # 例如 cd ~/g1_ws/unitree_rl_mjlab
+> ```
 
-<div style="margin-left: 20px;">
+#### 4.1 注册新策略（配置文件修改指南）
 
-#### 4.1 Power On the Robot
-Start the robot in suspended state and wait until it enters `zero-torque` mode.
+一个待部署的 ONNX 策略要接入本框架，一般需要完成以下 5 步：
 
-#### 4.2 Enable Debug Mode
-While in `zero-torque` mode, press `L2 + R2` on the controller. The robot will enter `debug mode` with joint damping enabled.
+1. **准备策略文件**：将训练导出的 `policy.onnx` 与 `policy.onnx.data` 放入
+   `deploy/robots/g1/config/policy/<策略名>/exported/`
+2. **编写部署配置** `deploy/robots/g1/config/policy/<策略名>/params/deploy.yaml`：
+   - `joint_ids_map`：模型关节顺序 → 硬件关节顺序 的重映射（长度 = 模型 DOF）
+   - `step_dt`：控制周期（如 `0.02` = 50Hz）
+   - `stiffness` / `damping` / `default_joint_pos`：关节刚度、阻尼、默认位置（按**模型顺序**给出）
+   - `actions`：动作配置（`target = action * scale + offset`）
+   - `observations`：观测项配置，**书写顺序即 ONNX 输入张量的拼接顺序，必须与训练一致**
+   - > ⚠️ 关节映射 / 观测顺序不匹配，是部署后动作异常的最常见原因。
+3. **注册 FSM 状态**：在 `deploy/robots/g1/config/config.yaml` 的 `FSM._` 中新增状态，指定**唯一 id** 与 `type`：
+   - `type: RLBase` —— 无参考轨迹的策略（如速度控制，对应 `State_RLBase`）
+   - `type: Mimic` —— 动作模仿策略，需额外提供 `motion_file`（对应 `State_Mimic`）
+   - `type: <自定义>` —— 观测逻辑差异较大时，见第 5 步
+4. **添加状态配置块**：配置 `transitions`（手柄切换条件）、`policy_dir`；Mimic 类型还需 `motion_file`、`time_start/end`
+5. **观测逻辑差异较大时**：在 `deploy/robots/g1/include/` 与 `deploy/robots/g1/src/` 下编写自定义
+   `State_<名字>.h/.cpp`（继承 `FSMState`，重写 `enter/run/exit` 与观测计算，用 `REGISTER_FSM` 注册），
+   并在 `deploy/robots/g1/main.cpp` 中 `#include` 对应头文件。
 
-#### 4.3 Connect to the Robot
-Connect your PC to the robot via Ethernet. Configure the network as:
-- Address：`192.168.123.222`
-- Netmask：`255.255.255.0`
+> [!TIP]
+> `config.yaml` 内已内置完整的注册引导注释与两个可直接照抄的示例
+> （`Velocity` = RLBase 示例，`Mimic_Dance1_subject2` = Mimic 示例）。
 
-Use `ifconfig` to determine the Ethernet device name for deployment.
+#### 4.2 Sim2Real：MuJoCo 仿真验证
 
-#### 4.4 Compilation
+上真机前先在 MuJoCo 仿真中验证策略。需要两个程序：仿真器 `unitree_mujoco` 与控制程序 `g1_ctrl`。
 
-Example: Unitree G1 velocity control.
-Place `policy.onnx` and `policy.onnx.data` into: `deploy/robots/g1/config/policy/velocity/v0/exported`.
-Then compile:
+**编译控制程序**（以 G1 为例）：
 
 ```bash
 cd deploy/robots/g1
-mkdir build && cd build
-cmake .. && make
+rm -rf build && mkdir build && cd build
+cmake ..
+make -j$(nproc)
 ```
 
-#### 4.5 Deployment
-
-## 4.5.1 Simulation Deployment
-
-Before deploying on the real robot, it is recommended to perform simulation deployment using [unitree_mujoco](https://github.com/unitreerobotics/unitree_mujoco)
-to prevent abnormal behaviors on the physical robot. This framework has already integrated it.
-
-Build unitree_mujoco：
+**编译仿真器**：
 
 ```bash
 cd simulate
-mkdir build && cd build
-cmake .. && make -j8
+rm -rf build && mkdir build && cd build
+cmake ..
+make -j$(nproc)
 ```
 
-Launch the simulator (note that a gamepad must be connected):
+**运行仿真**（需要连接手柄）：
+
+终端 1 —— 启动仿真器：
 
 ```bash
-./simulate/build/unitree_mujoco
+cd simulate/build
+./unitree_mujoco
 ```
 
-You can select the corresponding robot in `simulate/config`
-
-Launch the simulation control program:
-
-```bash
-cd deploy/robots/g1/build
-./g1_ctrl --network=lo
-```
-
-## 4.5.2 Real-Robot Deployment
-
-Launch the control program on the real robot:
+终端 2 —— 启动控制程序：
 
 ```bash
 cd deploy/robots/g1/build
-./g1_ctrl --network=enp5s0
+./g1_ctrl -n lo
 ```
 
-**Arguments**：
-- `network`: The network interface used to connect to the robot. Use `lo` for simulation deployment, and `enp5s0` for the real robot(You can check it using the `ifconfig` command) 
+进入后可通过键盘 `a` `b` `c` `d` 切换四个状态进行观测
+（`a`=Passive，`b`=FixStand，`c`=Velocity，`d`=Mimic_Dance1_subject2）。
 
-</div>
+> [!NOTE]
+> `-n` / `--network` 指定 DDS 网络接口。仿真时用 `lo`（本机回环）。
+
+#### 4.3 实机部署
+
+> 前置依赖：需先安装通信库
+> - [cyclonedds](https://github.com/eclipse-cyclonedds/cyclonedds.git)
+> - [unitree_sdk2](https://github.com/unitreerobotics/unitree_sdk2.git)
+
+**4.3.1 开机与调试模式**
+- 将机器人悬挂悬空启动，等待进入 `zero-torque`（零力矩）模式
+- 在零力矩模式下按手柄 `L2 + R2`，进入 `debug mode`（关节阻尼生效）
+
+**4.3.2 网络连接**
+用网线连接 PC 与机器人，配置 IPv4：
+- 地址：`192.168.123.222`
+- 子网掩码：`255.255.255.0`
+
+机器人默认地址通常为 `192.168.123.164`（以实际为准，可用 `ifconfig` / 宇树文档确认）。
+
+**4.3.3 传输项目到机器人**
+
+```bash
+ssh unitree@192.168.123.164        # 或对应的机器人地址
+scp -r deploy unitree@192.168.123.164:~/
+```
+
+**4.3.4 在机器人上编译并运行**
+
+```bash
+ssh unitree@192.168.123.164
+cd ~/deploy/robots/g1              # 按实际 scp 路径调整
+rm -rf build && mkdir build && cd build
+cmake ..
+make -j$(nproc)
+./g1_ctrl -n lo
+```
+
+> [!NOTE]
+> 若在机器人板载计算机内运行 `g1_ctrl`，DDS 走本机回环，一般用 `-n lo`；
+> 若通过网口与机器人通信（PC 直连运行），则改用对应网卡名（如 `-n enp5s0`，用 `ifconfig` 查看）。
+
+#### 4.4 手柄操作指南
+
+| 当前状态 | 按键 | 目标状态 | 说明 |
+|---------|------|---------|------|
+| Passive（阻尼模式） | `L2 + Up` | FixStand | 进入力矩/站立模式，调整机器人姿态至触地 |
+| FixStand | `R2 + A` | Velocity | 进入运控模式（速度控制） |
+| Velocity / FixStand | `R1 + A` | Mimic_Dance1_subject2 | 进入自定义动作（建议先取下背后挂钩） |
+| 任意状态 | `L2 + B` | Passive | 回到阻尼模式（**急停**） |
+
+> 键盘辅助（仿真调试）：`a`=Passive，`b`=FixStand，`c`=Velocity，`d`=Mimic_Dance1_subject2
 
 **Deployment Results**：
 
