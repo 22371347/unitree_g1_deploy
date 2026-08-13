@@ -15,13 +15,12 @@ default_joint_pos: [-1.0, -1.0, 0.0, 0.268, -0.268, 0.0, 0.169, -0.169, 0.0, 0.9
   -0.233, -0.233, -0.226, 0.226, -0.234, -0.234, 0.579, -0.579]
 commands:
   base_velocity:
-    # 与训练 boxing_push_recovery_env_cfg.py 的 CommandsCfg 保持一致
     ranges:
-      lin_vel_x: [-0.75, 0.75]
-      lin_vel_y: [-0.75, 0.75]
-      ang_vel_z: [-2.0, 2.0]
+      lin_vel_x: [-0.5, 0.5]
+      lin_vel_y: [-0.5, 0.5]
+      ang_vel_z: [-1.0, 1.0]
       heading: null
-    max_acceleration: [1, 2, 5]
+    max_acceleration: [0.5, 0.5, 1]
 actions:
   JointPositionAction:
     clip: null

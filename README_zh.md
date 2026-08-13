@@ -239,20 +239,25 @@ cd deploy/robots/g1/build
 
 ```bash
 ssh unitree@192.168.123.164        # 或对应的机器人地址
-scp -r deploy unitree@192.168.123.164:~/
+scp -r deploy unitree@192.168.123.164:~/wu/
 ```
 
-**4.3.4 在机器人上编译并运行**
 
+
+**4.3.4 在机器人上编译并运行**
+手柄按下R2+L2、L2+A，进入调试模式
 ```bash
 ssh unitree@192.168.123.164
-cd ~/deploy/robots/g1              # 按实际 scp 路径调整
+cd ~/wu/deploy/robots/g1              # 按实际 scp 路径调整
 rm -rf build && mkdir build && cd build
 cmake ..
 make -j$(nproc)
+
+tmux new -s 1
 ./g1_ctrl
 ```
 
+拉起后启动
 > [!NOTE]
 > 在机器人板载计算机内运行 `g1_ctrl` 时无需指定网络参数（使用默认 DDS 配置）。
 > 若在 PC 上做仿真则使用 `-n lo`；若 PC 通过网口直连机器人运行，则改用对应网卡名（如 `-n enp5s0`，用 `ifconfig` 查看）。
@@ -263,7 +268,7 @@ make -j$(nproc)
 |----------------------|---------|-----------------------|------------------------------|
 | Passive（阻尼模式）    | L2 + Up | FixStand              | 进入力矩模式，调整机器人姿态至触地 |
 | FixStand             | R2 + A  | Velocity              | 进入运控模式（速度控制）         |
-| Velocity / FixStand  | R1 + A  | Mimic_Dance1_subject2 | 进入自定义动作                 |
+| Velocity / FixStand  | R1 + A  | 拳击姿态               | 进入拳击姿态动作                 |
 | 任意状态              | L2 + B  | Passive               | 回到阻尼模式（**急停**）         |
 
 > 键盘辅助（仿真调试）：`a`=Passive，`b`=FixStand，`c`=Velocity，`d`=自定义动作

@@ -67,10 +67,12 @@ FSM:
       3,3,3,3,3,3,3,  
     ]
 
+  # 修改默认关节位置
   FixStand:
     transitions: 
       Passive: LT + B.on_pressed
       Velocity: RT + A.on_pressed
+      Fight: RB + A.on_pressed
     kp: [
       100,100,100,150,40,40,
       100,100,100,150,40,40,
@@ -86,14 +88,11 @@ FSM:
       10,10,10,10,10,10,10,
     ]
     ts: [0, 2]
+    # qs 按 qpos 顺序（与 FixStand kp/kd 一致），目标姿态 = Fight 拳击初始站姿
+    # （由 fight deploy.yaml 的 default_joint_pos 经 beyondmimic->qpos 重排得到）
     qs: [
       [],
-      [ -0.1, 0,0,0.3,-0.2,0,
-        -0.1, 0,0,0.3,-0.2,0,
-        0,0,0,
-        0.35, 0.18,0,0.87,0,0,0,
-        0.35,-0.18,0,0.87,0,0,0
-      ]
+      [-1.0, 0.268, 0.169, 0.904, -0.256, -0.0638, -1.0, -0.268, -0.169, 0.904, -0.256, 0.0638, 0.0, 0.0, 0.0, -0.924, 0.133, 0.1, -0.233, -0.226, -0.234, 0.579, -0.924, -0.133, -0.1, -0.233, 0.226, -0.234, -0.579]
     ]
 
   # ---- 示例：RLBase 类型策略（速度控制等，无需参考轨迹）----
@@ -111,5 +110,6 @@ FSM:
   Fight:
     transitions:
       Passive: LT + B.on_pressed
+      FixStand: LT + up.on_pressed
       Velocity: RT + A.on_pressed
     policy_dir: config/policy/fight
