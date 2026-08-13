@@ -57,7 +57,7 @@ inline std::filesystem::path get_bin_path() {
 }
 
 /* ---------- config.yaml ---------- */
-inline void load_config_file()
+inline void load_config_file(std::string config_file_name = "config.yaml")
 {
     assert(std::filesystem::exists(bin_path)); // run param::helper before this function
     if(bin_path.parent_path().filename() == "bin" || bin_path.parent_path().filename() == "build")
@@ -71,14 +71,16 @@ inline void load_config_file()
         config_dir = proj_dir;
     }
 
+    std::string config_file = (config_dir / config_file_name).string();
+    if(!std::filesystem::exists(config_file)) {
+        spdlog::error("Config file not found: {} (searched in {})", config_file_name, config_dir.string());
+        exit(1);
+    }
     try {
-        std::string config_file = (config_dir / "config.yaml").string();
-        if(std::filesystem::exists(config_file))
-        {
-            config = YAML::LoadFile(config_file);
-        }
+        config = YAML::LoadFile(config_file);
+        spdlog::info("Loaded config file: {}", config_file);
     } catch (const YAML::BadFile& e) {
-        spdlog::error("Failed to load config.yaml: {}", e.what());
+        spdlog::error("Failed to load {}: {}", config_file, e.what());
         exit(1);
     }
 }
@@ -122,7 +124,6 @@ namespace po = boost::program_options;
 inline po::variables_map helper(int argc, char** argv) 
 {
     bin_path = get_bin_path();
-    load_config_file();
 
     po::options_description desc("Unitree Controller");
     desc.add_options()
@@ -130,6 +131,7 @@ inline po::variables_map helper(int argc, char** argv)
         ("version,v", "show version")
         ("log", "record log file")
         ("network,n", po::value<std::string>()->default_value(""), "dds network interface")
+        ("config,c", po::value<std::string>()->default_value("config.yaml"), "config file name under config/ dir (e.g. --config=config_fight.yaml)")
         ;
 
     po::variables_map vm;
@@ -146,6 +148,9 @@ inline po::variables_map helper(int argc, char** argv)
         std::cout << "Version: " << VERSION << std::endl;
         exit(0);
     }
+
+    // 加载指定配置文件（默认 config.yaml，可用 --config 切换不同策略配置，避免复制粘贴）
+    load_config_file(vm["config"].as<std::string>());
 
 #ifndef NDEBUG
     spdlog::set_level(spdlog::level::debug);

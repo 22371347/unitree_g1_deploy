@@ -171,8 +171,24 @@ python scripts/play.py Unitree-G1-Tracking-No-State-Estimation --motion_file=src
    并在 `deploy/robots/g1/main.cpp` 中 `#include` 对应头文件。
 
 > [!TIP]
-> `config.yaml` 内已内置完整的注册引导注释与两个可直接照抄的示例
-> （`Velocity` = RLBase 示例，`Mimic_Dance1_subject2` = Mimic 示例）。
+> `config.yaml` 内已内置完整的注册引导注释与可直接照抄的示例
+> （`Velocity` = RLBase 示例，`Fight` / `AMP` = 策略状态示例）。
+
+#### 多配置并行测试（配置预设）
+
+在 `deploy/robots/g1/config/` 下保存为 `config_<策略名>.yaml`（如 `config_fight.yaml`、`config_AMP.yaml`），
+启动时用 `--config` 选择即可——无需复制粘贴，无需重新编译：
+
+```bash
+cd deploy/robots/g1/build
+./g1_ctrl -n lo -c config_fight.yaml     # 仿真，fight 策略
+./g1_ctrl -n lo -c config_AMP.yaml       # 仿真，AMP 策略
+./g1_ctrl -c config_fight.yaml           # 实机（默认 DDS 配置）
+```
+
+- 未指定 `--config` 时默认加载 `config.yaml`。
+- 各预设共享公共状态（`Passive` / `FixStand` / `Velocity`），仅在启用的策略状态（`Fight` / `AMP` / …）上不同，
+  编辑时请保持公共部分一致。
 
 #### 4.2 Sim2Real：MuJoCo 仿真验证
 

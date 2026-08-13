@@ -174,8 +174,26 @@ To integrate a new ONNX policy into this framework, generally complete the follo
    `deploy/robots/g1/main.cpp`.
 
 > [!TIP]
-> `config.yaml` already contains a complete registration guide comment and two ready-to-copy examples
-> (`Velocity` = RLBase example, `Mimic_Dance1_subject2` = Mimic example).
+> `config.yaml` already contains a complete registration guide comment and ready-to-copy examples
+> (`Velocity` = RLBase example, `Fight` / `AMP` = policy state examples).
+
+#### Parallel Testing with Config Presets
+
+When testing several policies alternately, keep **one config file per policy** instead of overwriting
+`config.yaml`. Save presets as `config_<policy>.yaml` under `deploy/robots/g1/config/`
+(e.g. `config_fight.yaml`, `config_AMP.yaml`) and select them at launch with `--config` — no copy-paste,
+no recompile:
+
+```bash
+cd deploy/robots/g1/build
+./g1_ctrl -n lo -c config_fight.yaml     # simulation, fight policy
+./g1_ctrl -n lo -c config_AMP.yaml       # simulation, AMP policy
+./g1_ctrl -c config_fight.yaml           # real robot (default DDS config)
+```
+
+- `config.yaml` is loaded by default when `--config` is omitted.
+- Each preset shares the common states (`Passive` / `FixStand` / `Velocity`) and only differs in the
+  enabled policy states (`Fight` / `AMP` / ...) — keep the common parts consistent when editing.
 
 #### 4.2 Sim2Real: MuJoCo Simulation Validation
 
