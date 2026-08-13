@@ -11,6 +11,7 @@
 #include "isaaclab/algorithms/algorithms.h"
 #include <iostream>
 #include <atomic>
+#include <chrono>
 #include "isaaclab/utils/utils.h"
 
 namespace isaaclab
@@ -107,7 +108,10 @@ public:
         
 
         // ===== 执行策略推理 =====        
+        auto infer_begin = std::chrono::high_resolution_clock::now();
         auto action = alg->act(obs);
+        last_inference_s.store(std::chrono::duration<double>(
+            std::chrono::high_resolution_clock::now() - infer_begin).count());
                 
         // ===== 调试输出：置零输出/打印策略输出 =====
         std::vector<float> locked_action(29, 0.0f);
@@ -141,6 +145,7 @@ public:
     std::shared_ptr<Articulation> robot;
     std::unique_ptr<Algorithms> alg;
     std::atomic<long> episode_length{0};
+    std::atomic<double> last_inference_s{0.0};   // 最近一次策略推理耗时（s），供健康日志使用
     float global_phase = 0.0f;
     std::vector<float> command{0.0f, 0.0f, 0.0f}; // 经 max_acceleration 限速后的速度指令
 

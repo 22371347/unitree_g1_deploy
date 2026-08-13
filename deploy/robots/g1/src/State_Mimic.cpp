@@ -2,6 +2,7 @@
 #include "unitree_articulation.h"
 #include "isaaclab/envs/mdp/observations/observations.h"
 #include "isaaclab/envs/mdp/actions/joint_actions.h"
+#include "g1_health_logger.h"
 #include <onnxruntime_cxx_api.h>
 
 static Eigen::Quaternionf init_quat;
@@ -331,4 +332,10 @@ void State_Mimic::run()
     for(int i(0); i < env->robot->data.joint_ids_map.size(); i++) {
         lowcmd->msg_.motor_cmd()[env->robot->data.joint_ids_map[i]].q() = action[i];
     }
+
+    // ---- G1 health logger：记录真正发出去的 LowCmd（Publish 之前） ----
+    g1health::G1HealthLogger::instance().logCycle(
+        lowstate->msg_, lowcmd->msg_,
+        g1health::actionToHardware(env->robot->data.joint_ids_map, action, 29),
+        g1health::nanv(), env->last_inference_s.load(), g1health::nanv());
 }

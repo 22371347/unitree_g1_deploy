@@ -118,3 +118,15 @@ FSM:
       FixStand: LT + up.on_pressed
       Velocity: RT + A.on_pressed
     policy_dir: config/policy/AMP
+
+# =====================================================================
+#  健康日志 (g1_health_logger)
+# =====================================================================
+health_log:
+  enabled: false
+  out_dir: logs/g1_health
+  control_hz: 1000.0
+  log_hz: 50.0
+  print_hz: 1.0
+  ring_seconds: 30.0
+  enable_bms: true

@@ -1,68 +1,117 @@
-joint_ids_map: [0, 6, 12, 1, 7, 13, 2, 8, 14, 3, 9, 15, 22, 4, 10, 16, 23, 5, 11,
-  17, 24, 18, 25, 19, 26, 20, 27, 21, 28]
+# ============================================================
+# AMP 运行策略部署配置
+# ============================================================
+# 模型：4 帧历史观测（384 维）+ 29 维动作（由 ONNX 实测确认）
+#   - 观测：6 项 × 4 帧历史，按项连续拼接（term-wise）共 384 维
+#     [base_ang_vel(12) + projected_gravity(12) + command(12)
+#      + joint_pos(116) + joint_vel(116) + actions(116)]
+#     （与 IsaacLab concatenate_terms=True 一致，勿用 use_gym_history）
+#   - 动作：29 维关节位置指令，Isaac Lab 标准 G1 关节顺序
+# ============================================================
+
+# ---- G1 硬件关节顺序（qpos 顺序）----
+# 0 left_hip_pitch     7 right_hip_roll    14 waist_pitch      21 left_wrist_yaw
+# 1 left_hip_roll      8 right_hip_yaw     15 left_shoulder_p  22 right_shoulder_p
+# 2 left_hip_yaw       9 right_knee        16 left_shoulder_r  23 right_shoulder_r
+# 3 left_knee         10 right_ankle_p     17 left_shoulder_y  24 right_shoulder_y
+# 4 left_ankle_p      11 right_ankle_r     18 left_elbow       25 right_elbow
+# 5 left_ankle_r      12 waist_yaw         19 left_wrist_roll  26 right_wrist_roll
+# 6 right_hip_pitch   13 waist_roll        20 left_wrist_pitch 27 right_wrist_pitch
+#                                            ...              28 right_wrist_yaw
+
+# ---- 模型关节顺序（Isaac Lab 标准 G1 顺序，观测与动作一致）----
+#  0 left_shoulder_p   5 right_shoulder_p  10 left_hip_yaw    15 left_knee
+# 1 left_shoulder_r   6 right_shoulder_r  11 right_hip_yaw   16 right_hip_pitch
+# 2 left_shoulder_y   7 right_shoulder_y  12 waist_yaw       17 right_hip_roll
+# 3 left_elbow        8 right_elbow       13 left_hip_pitch  18 right_knee
+# 4 left_wrist_roll   9 right_wrist_roll  14 left_hip_roll   19 left_wrist_pitch
+# 20 left_wrist_yaw   21 right_wrist_pitch 22 right_wrist_yaw
+# 23 waist_roll       24 waist_pitch       25 left_ankle_p    26 left_ankle_r
+# 27 right_ankle_p    28 right_ankle_r
+
+# ---- 观测项信息（每帧 96 维内各项顺序）----
+# 索引	观测项	维度	说明
+# 0:3	base_ang_vel	3	IMU 角速度（机体系）
+# 3:6	projected_gravity	3	重力方向（机体系）
+# 6:9	command	3	twist 指令 [lin_x, lin_y, yaw_rate]
+# 9:38	joint_pos	29	关节位置（模型顺序，相对默认位形）
+# 38:67	joint_vel	29	关节速度（模型顺序）
+# 67:96	actions	29	上一步动作（模型顺序）
+# 实际拼接：每项 4 帧历史按项连续拼接（term-wise），共 384 维
+
+# 关节映射：joint_ids_map[i] = 模型第 i 个关节对应的硬件 motor 序号（qpos 序）
+# 由“Isaac Lab 顺序 -> qpos 顺序”计算得到，观测与动作共用此映射
+joint_ids_map: [15,16,17,18,19,22,23,24,25,26,2,8,12,0,1,3,6,7,9,20,21,27,28,13,14,4,5,10,11]
+
+# 控制周期（50Hz）
 step_dt: 0.02
-stiffness: [100.0, 100.0, 100.0, 150.0, 40.0, 40.0, 100.0, 100.0, 100.0, 150.0, 40.0,
-  40.0, 200.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0, 40.0,
-  40.0, 40.0, 40.0, 40.0]
-damping: [2.0, 2.0, 2.0, 4.0, 2.0, 2.0, 2.0, 2.0, 2.0, 4.0, 2.0, 2.0, 5.0, 5.0, 5.0,
-  1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-default_joint_pos: [-1.0, -1.0, 0.0, 0.268, -0.268, 0.0, 0.169, -0.169, 0.0, 0.904,
-  0.904, -0.924, -0.924, -0.256, -0.256, 0.133, -0.133, -0.0638, 0.0638, 0.1, -0.1,
-  -0.233, -0.233, -0.226, 0.226, -0.234, -0.234, 0.579, -0.579]
+
+# 关节刚度（29 个，按模型顺序给出，经 joint_ids_map 重映射到硬件）
+stiffness: [14.3,14.3,14.3,14.3,14.3,14.3,14.3,14.3,14.3,14.3,40.2,40.2,40.2,40.2,99.1,99.1,40.2,99.1,99.1,16.8,16.8,16.8,16.8,28.5,28.5,28.5,28.5,28.5,28.5]
+
+# 关节阻尼（29 个，模型顺序）
+damping: [0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,0.9,2.6,2.6,2.6,2.6,6.3,6.3,2.6,6.3,6.3,1.1,1.1,1.1,1.1,1.8,1.8,1.8,1.8,1.8,1.8]
+
+# 默认关节位置（站立姿态，模型顺序；joint_pos_rel 观测会减去它）
+default_joint_pos: [0.35,0.18,0,0.87,0,0.35,-0.18,0,0.87,0,0,0,0,-0.1,0,0.3,-0.1,0,0.3,0,0,0,0,0,0,-0.2,0,-0.2,0]
+
+# 指令范围（手柄摇杆 -> 速度指令，velocity_commands 观测使用）
 commands:
   base_velocity:
-    # 与训练 boxing_push_recovery_env_cfg.py 的 CommandsCfg 保持一致
     ranges:
-      lin_vel_x: [-0.75, 0.75]
-      lin_vel_y: [-0.75, 0.75]
-      ang_vel_z: [-2.0, 2.0]
+      lin_vel_x: [-0.5, 1.0]
+      lin_vel_y: [-0.5, 0.5]
+      ang_vel_z: [-1.0, 1.0]
       heading: null
-    max_acceleration: [1, 2, 5]
+
 actions:
   JointPositionAction:
     clip: null
     joint_names: [.*]
-    scale: [0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25,
-      0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25,
-      0.25, 0.25, 0.25, 0.25]
-    offset: [-1.0, -1.0, 0.0, 0.268, -0.268, 0.0, 0.169, -0.169, 0.0, 0.904, 0.904,
-      -0.924, -0.924, -0.256, -0.256, 0.133, -0.133, -0.0638, 0.0638, 0.1, -0.1, -0.233,
-      -0.233, -0.226, 0.226, -0.234, -0.234, 0.579, -0.579]
+    # 动作缩放系数（29 个，模型顺序；IsaacLab 标准 locomotion 动作缩放 0.25）
+    scale: [0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25,
+            0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25]
+    # 动作偏移量 = 默认关节位置（模型顺序），即 target = action*scale + offset
+    offset: [0.35,0.18,0,0.87,0,0.35,-0.18,0,0.87,0,0,0,0,-0.1,0,0.3,-0.1,0,0.3,0,0,0,0,0,0,-0.2,0,-0.2,0]
     joint_ids: null
-    #joint_ids: [0, 6, 12, 1, 7, 13, 2, 8, 14, 3, 9, 15, 22, 4, 10, 16, 23, 5, 11, 17, 24, 18, 25, 19, 26, 20, 27, 21, 28]
-    
+
 observations:
+  # gym 式历史：每项 history_length=4，块序 [t-3, t-2, t-1, t]（最旧在前）
+  # 注意：use_gym_history 需放在观测项之后，且首项必须带 params
   base_ang_vel:
     params: {}
     clip: null
     scale: [0.2, 0.2, 0.2]
-    history_length: 5
+    history_length: 4
   projected_gravity:
     params: {}
     clip: null
     scale: [1.0, 1.0, 1.0]
-    history_length: 5
+    history_length: 4
   velocity_commands:
     params: {command_name: base_velocity}
     clip: null
     scale: [1.0, 1.0, 1.0]
-    history_length: 5
+    history_length: 4
   joint_pos_rel:
     params: {}
     clip: null
-    scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-      1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-    history_length: 5
+    scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+            1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    history_length: 4
   joint_vel_rel:
     params: {}
     clip: null
-    scale: [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
-      0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
-      0.05, 0.05, 0.05, 0.05]
-    history_length: 5
+    scale: [0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05,
+            0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05]
+    history_length: 4
   last_action:
     params: {}
     clip: null
-    scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-      1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-    history_length: 5
+    scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+            1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    history_length: 4
+  # 与 IsaacLab concatenate_terms=True 一致：按项拼接（term-wise），不要用 gym 式块拼接
+  use_gym_history: false
+
+

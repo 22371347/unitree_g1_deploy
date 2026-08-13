@@ -4,6 +4,7 @@
 #include "FSM/State_RLBase.h"
 #include "State_Mimic.h"
 #include "State_Wbc.h"
+#include "g1_health_logger.h"
 
 std::unique_ptr<LowCmd_t> FSMState::lowcmd = nullptr;
 std::shared_ptr<LowState_t> FSMState::lowstate = nullptr;
@@ -39,6 +40,9 @@ int main(int argc, char** argv)
 
     init_fsm_state();
 
+    // 健康日志配置（可选，读取 config.yaml 的 health_log: 节）
+    g1health::G1HealthLogger::initFromConfig(param::config["health_log"]);
+
     FSMState::lowcmd->msg_.mode_machine() = 5; // 29dof
     if(!FSMState::lowcmd->check_mode_machine(FSMState::lowstate)) {
         spdlog::critical("Unmatched robot type.");
@@ -51,7 +55,7 @@ int main(int argc, char** argv)
 
     std::cout << "Press [L2 + Up] to enter FixStand mode.\n";
     std::cout << "And then press [R2 + A] to start controlling the robot.\n";
-    std::cout << "And then press [R1 + A] to Fight (boxing) policy.\n";
+    std::cout << "And then press [R1 + A] to custom policy.\n";
 
     while (true)
     {
