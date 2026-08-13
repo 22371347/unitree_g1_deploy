@@ -1,5 +1,37 @@
+# =====================================================================
+#  FSM 状态机配置 —— 注册新策略指南
+# =====================================================================
+#  一个待部署的 ONNX 策略要接入本框架，通常需要完成以下 5 步：
+#
+#  (1) 准备策略文件（onnx 模型 + 归一化参数）：
+#      将训练导出的文件放入策略目录：
+#        config/policy/<策略名>/exported/policy.onnx
+#        config/policy/<策略名>/exported/policy.onnx.data
+#
+#  (2) 编写部署配置 config/policy/<策略名>/params/deploy.yaml：
+#        joint_ids_map     : 模型关节顺序 -> 硬件关节顺序 的重映射（长度=模型DOF）
+#        step_dt           : 控制周期（如 0.02 = 50Hz）
+#        stiffness/damping : 关节刚度/阻尼（按【模型顺序】给出，代码会经 joint_ids_map 重映射到硬件）
+#        default_joint_pos : 策略默认关节位置（模型顺序）
+#        actions           : 动作空间配置（scale=动作缩放、offset=默认位置，即 target = action*scale + offset）
+#        observations      : 观测项配置，【各项的书写顺序即 ONNX 模型输入张量的拼接顺序】，务必与训练一致
+#        【注意】关节映射与观测顺序不匹配是部署后动作异常的最常见原因。
+#
+#  (3) 在下方 FSM._ 中注册新状态：给它一个【不与现有状态冲突的 id】，并指定 type：
+#        type: RLBase      -> 速度控制等“无参考轨迹”的策略（State_RLBase）
+#        type: Mimic       -> 动作模仿策略，需要额外提供 motion_file 参考轨迹 npz（State_Mimic）
+#        type: <自定义>     -> 若观测逻辑差异较大，见步骤(5)
+#
+#  (4) 添加该状态自己的配置块（transitions 手柄切换、policy_dir 等），参考下方 Velocity / Mimic 示例。
+#
+#  (5) 观测逻辑差异较大时的自定义实现：
+#       在 deploy/robots/g1/include/ 和 deploy/robots/g1/src/ 下编写 State_<名字>.h/.cpp
+#       （继承 FSMState，重写 enter/run/exit 与观测计算），用 REGISTER_FSM(State_<名字>)
+#       注册后，在 main.cpp 中 #include，并把上面 type 指定为 <名字> 即可。
+# =====================================================================
+
 FSM:
-  _: # enabled fsms
+  _: # enabled fsms —— 在此处注册所有启用的状态
     Passive:
       id: 1
     FixStand:
@@ -7,11 +39,18 @@ FSM:
     Velocity:
       id: 3
       type: RLBase
-
     Mimic_Dance1_subject2:
       id: 5
       type: Mimic
-
+    # AMP 运行策略：速度指令驱动 + 4帧历史观测，同 RLBase 类型
+    AMP:
+      id: 6
+      type: RLBase
+    # ---- 示例：再新增一个策略状态（以 type: Mimic 为例）----
+    # MyNewPolicy:
+    #   id: 9          # 唯一 id，不要与现有 id 重复
+    #   type: Mimic    # RLBase / Mimic / 自定义 State 名
+    # --------------------------------------------------
 
   Passive:
     transitions: 
@@ -31,12 +70,10 @@ FSM:
       3,3,3,3,3,3,3,  
     ]
 
-
   FixStand:
     transitions: 
       Passive: LT + B.on_pressed
       Velocity: RT + A.on_pressed
-
     kp: [
       100,100,100,150,40,40,
       100,100,100,150,40,40,
@@ -62,21 +99,34 @@ FSM:
       ]
     ]
 
-
+  # ---- 示例：RLBase 类型策略（速度控制等，无需参考轨迹）----
+  # transitions:  手柄/按键条件 -> 目标状态，格式：<目标状态名>: <触发条件>
+  # policy_dir:   策略目录（exported/ 与 params/ 的父目录），不含前导 ./ 或 ~
   Velocity:
     transitions: 
       Passive: LT + B.on_pressed
+      FixStand: LT + up.on_pressed
       Mimic_Dance1_subject2: RB + A.on_pressed
-
+      AMP: RB + X.on_pressed
     policy_dir: config/policy/velocity
 
-
+  # ---- 示例：Mimic 类型策略（动作模仿，需参考轨迹 npz）----
+  # 除 policy_dir 外还需 motion_file（参考轨迹），time_start/time_end 为播放区间（秒）
   Mimic_Dance1_subject2:
     transitions:
       Passive: LT + B.on_pressed
       Velocity: RT + A.on_pressed
-
+      AMP: RB + X.on_pressed
     motion_file: config/policy/mimic/dance1_subject2/params/dance1_subject2.npz
     policy_dir: config/policy/mimic/dance1_subject2/
     time_start: 0.0
     time_end: 1000.0
+
+  # ---- AMP 运行策略（type: RLBase，速度指令驱动 + 4帧历史）----
+  # 手柄 RB + X 从 Velocity / Mimic 切入，速度用左摇杆 + 右摇杆 yaw 控制
+  AMP:
+    transitions:
+      Passive: LT + B.on_pressed
+      Velocity: RT + A.on_pressed
+      Mimic_Dance1_subject2: RB + A.on_pressed
+    policy_dir: config/policy/AMP

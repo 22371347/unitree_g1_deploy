@@ -110,16 +110,32 @@ REGISTER_OBSERVATION(last_action)
 
 REGISTER_OBSERVATION(velocity_commands)
 {
-    std::vector<float> obs(3);
+    std::vector<float> target(3);
     auto & joystick = env->robot->data.joystick;
 
     const auto cfg = env->cfg["commands"]["base_velocity"]["ranges"];
 
-    obs[0] = std::clamp(joystick->ly(), cfg["lin_vel_x"][0].as<float>(), cfg["lin_vel_x"][1].as<float>());
-    obs[1] = std::clamp(-joystick->lx(), cfg["lin_vel_y"][0].as<float>(), cfg["lin_vel_y"][1].as<float>());
-    obs[2] = std::clamp(-joystick->rx(), cfg["ang_vel_z"][0].as<float>(), cfg["ang_vel_z"][1].as<float>());
+    target[0] = std::clamp(joystick->ly(), cfg["lin_vel_x"][0].as<float>(), cfg["lin_vel_x"][1].as<float>());
+    target[1] = std::clamp(-joystick->lx(), cfg["lin_vel_y"][0].as<float>(), cfg["lin_vel_y"][1].as<float>());
+    target[2] = std::clamp(-joystick->rx(), cfg["ang_vel_z"][0].as<float>(), cfg["ang_vel_z"][1].as<float>());
 
-    return obs;
+    // 可选限速：deploy.yaml 中 commands.base_velocity.max_acceleration
+    // 限制指令速度的最大变化速率（线性 m/s^2，角速度 rad/s^2）
+    // 输出指令按每步 dt 向目标逼近，与训练时的指令生成保持一致
+    auto base_vel_cfg = env->cfg["commands"]["base_velocity"];
+    if(base_vel_cfg["max_acceleration"])
+    {
+        const auto max_acc = base_vel_cfg["max_acceleration"].as<std::vector<float>>();
+        for(int i(0); i < 3; ++i)
+        {
+            float max_step = max_acc[i] * env->step_dt; // 单步允许的最大变化量
+            float diff = target[i] - env->command[i];
+            env->command[i] += std::clamp(diff, -max_step, max_step);
+            //env->command[i] = target[i] - env->command[i];
+        }
+        return env->command;
+    }
+    return target;
 }
 
 REGISTER_OBSERVATION(gait_phase)

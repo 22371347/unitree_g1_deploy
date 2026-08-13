@@ -22,7 +22,7 @@
 #        type: Mimic       -> 动作模仿策略，需要额外提供 motion_file 参考轨迹 npz（State_Mimic）
 #        type: <自定义>     -> 若观测逻辑差异较大，见步骤(5)
 #
-#  (4) 添加该状态自己的配置块（transitions 手柄切换、policy_dir 等），参考下方 Velocity / Mimic 示例。
+#  (4) 添加该状态自己的配置块（transitions 手柄切换、policy_dir 等），参考下方 Velocity / Fight 示例。
 #
 #  (5) 观测逻辑差异较大时的自定义实现：
 #       在 deploy/robots/g1/include/ 和 deploy/robots/g1/src/ 下编写 State_<名字>.h/.cpp
@@ -39,17 +39,14 @@ FSM:
     Velocity:
       id: 3
       type: RLBase
-    Mimic_Dance1_subject2:
+    # Fight 拳击策略：速度指令驱动 + 5帧历史观测，同 RLBase 类型
+    Fight:
       id: 5
-      type: Mimic
-    # AMP 运行策略：速度指令驱动 + 4帧历史观测，同 RLBase 类型
-    AMP:
-      id: 6
       type: RLBase
-    # ---- 示例：再新增一个策略状态（以 type: Mimic 为例）----
+    # ---- 示例：再新增一个策略状态（以 type: RLBase 为例）----
     # MyNewPolicy:
     #   id: 9          # 唯一 id，不要与现有 id 重复
-    #   type: Mimic    # RLBase / Mimic / 自定义 State 名
+    #   type: RLBase   # RLBase / Mimic / 自定义 State 名
     # --------------------------------------------------
 
   Passive:
@@ -106,27 +103,13 @@ FSM:
     transitions: 
       Passive: LT + B.on_pressed
       FixStand: LT + up.on_pressed
-      Mimic_Dance1_subject2: RB + A.on_pressed
-      AMP: RB + X.on_pressed
+      Fight: RB + A.on_pressed
     policy_dir: config/policy/velocity
 
-  # ---- 示例：Mimic 类型策略（动作模仿，需参考轨迹 npz）----
-  # 除 policy_dir 外还需 motion_file（参考轨迹），time_start/time_end 为播放区间（秒）
-  Mimic_Dance1_subject2:
+  # ---- Fight 拳击策略（type: RLBase，速度指令驱动 + 5帧历史）----
+  # 手柄 RB + A 从 Velocity 切入；指令速度带 max_acceleration 限速（见 deploy.yaml）
+  Fight:
     transitions:
       Passive: LT + B.on_pressed
       Velocity: RT + A.on_pressed
-      AMP: RB + X.on_pressed
-    motion_file: config/policy/mimic/dance1_subject2/params/dance1_subject2.npz
-    policy_dir: config/policy/mimic/dance1_subject2/
-    time_start: 0.0
-    time_end: 1000.0
-
-  # ---- AMP 运行策略（type: RLBase，速度指令驱动 + 4帧历史）----
-  # 手柄 RB + X 从 Velocity / Mimic 切入，速度用左摇杆 + 右摇杆 yaw 控制
-  AMP:
-    transitions:
-      Passive: LT + B.on_pressed
-      Velocity: RT + A.on_pressed
-      Mimic_Dance1_subject2: RB + A.on_pressed
-    policy_dir: config/policy/AMP
+    policy_dir: config/policy/fight

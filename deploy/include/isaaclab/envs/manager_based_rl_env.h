@@ -52,6 +52,7 @@ public:
     {
         global_phase = 0;
         episode_length = 0;
+        command.assign(3, 0.0f); // 限速后的速度指令复位
         robot->update();
         action_manager->reset();
         observation_manager->reset();
@@ -141,6 +142,7 @@ public:
     std::unique_ptr<Algorithms> alg;
     std::atomic<long> episode_length{0};
     float global_phase = 0.0f;
+    std::vector<float> command{0.0f, 0.0f, 0.0f}; // 经 max_acceleration 限速后的速度指令
 
 };
 };

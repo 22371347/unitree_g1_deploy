@@ -108,8 +108,7 @@ private:
             if (key == "a") nextStateMode = 1;   // Passive
             else if (key == "b") nextStateMode = 2; // FixStand
             else if (key == "c") nextStateMode = 3; // Velocity
-            else if (key == "d") nextStateMode = 5; // Mimic_Dance1_subject2
-            else if (key == "e") nextStateMode = 6; // AMP
+            else if (key == "d") nextStateMode = 5; // Fight
         }
         
 
