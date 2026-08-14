@@ -109,6 +109,8 @@ private:
             else if (key == "b") nextStateMode = 2; // FixStand
             else if (key == "c") nextStateMode = 3; // Velocity
             else if (key == "d") nextStateMode = 5; // 自定义动作
+
+            
         }
         
 

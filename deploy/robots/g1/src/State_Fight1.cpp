@@ -68,9 +68,6 @@ State_Fight1::State_Fight1(int state_mode, std::string state_string)
     spdlog::info("[fight1] Loaded motion file '{}' frames={} duration={:.2f}s",
                  motion_file.filename().string(), num_frames_, motion_->duration);
 
-    if (cfg["motion_mode"]) motion_mode_ = cfg["motion_mode"].as<std::string>();
-    if (cfg["end_state"])   end_state_   = cfg["end_state"].as<std::string>();
-
     // env + alg
     env = std::make_unique<isaaclab::ManagerBasedRLEnv>(
         YAML::LoadFile(policy_dir / "params" / "deploy.yaml"),
@@ -80,17 +77,6 @@ State_Fight1::State_Fight1(int state_mode, std::string state_string)
     env->alg = std::make_unique<isaaclab::OrtRunner>(onnx_path);
     load_waist_indices_from_onnx(onnx_path.string(), motion_);
 
-    // 退出检查
-    if (motion_mode_ == "once") {
-        // motion 播放结束 -> 切换到 end_state
-        int end_id = FSMStringMap.right.at(end_state_);
-        this->registered_checks.emplace_back(
-            std::make_pair(
-                [&]()->bool{ return frame_ >= num_frames_ - 1; },
-                end_id
-            )
-        );
-    }
     // 姿态异常 -> Passive
     this->registered_checks.emplace_back(
         std::make_pair(
@@ -114,7 +100,10 @@ void State_Fight1::enter()
     }
 
     env->robot->update();
-    frame_ = 0;
+    // 进入后先站立：停在 motion 最后一帧（末帧 == 首帧 == 站姿，速度 0），
+    // 由 RB+A / 键盘 r 触发重新播放（见 replay_motion）
+    frame_ = num_frames_ - 1;
+    motion_->frame = frame_;
 
     // 初始偏航对齐：把 motion 参考旋转到机器人初始朝向系（消除两者初始偏航差）
     auto ref_yaw   = isaaclab::yawQuaternion(motion_->root_quaternion()).toRotationMatrix();
@@ -135,6 +124,20 @@ void State_Fight1::enter()
         while (policy_thread_running)
         {
             env->robot->update();
+
+            // 重播信号：RB + A 同时按下的上升沿 -> 重新播放动作（帧回零/重新对齐/清 last_action）
+            auto & joy = FSMState::lowstate->joystick;
+            bool restart_key = joy.RB.pressed && joy.A.pressed;
+            // 键盘检测
+            std::string key = FSMState::keyboard->key();
+            if (restart_key && !last_restart_key_) {
+                replay_motion();
+            }
+            else if (key == "r") {  // 按 'r' 键重播
+                replay_motion();
+            }
+            last_restart_key_ = restart_key;
+
             advance_frame();
             auto obs_map = build_obs_map();
             auto action = env->alg->act(obs_map);
@@ -165,12 +168,27 @@ void State_Fight1::run()
 
 void State_Fight1::advance_frame()
 {
-    if (motion_mode_ == "loop") {
-        frame_ = (frame_ + 1) % num_frames_;
-    } else {  // once / hold：播放到最后一帧后保持
-        frame_ = std::min(frame_ + 1, num_frames_ - 1);
-    }
+    // 固定 hold 逻辑：从头播放，播到最后一帧（站立）后保持
+    frame_ = std::min(frame_ + 1, num_frames_ - 1);
     motion_->frame = frame_;
+}
+
+
+void State_Fight1::replay_motion()
+{
+    // 1) 帧回零：从动作开头重新播放
+    frame_ = 0;
+    motion_->frame = 0;
+
+    // 2) 重新对齐：以当前机器人朝向为基准重算偏航对齐
+    auto ref_yaw   = isaaclab::yawQuaternion(motion_->root_quaternion()).toRotationMatrix();
+    auto robot_yaw = isaaclab::yawQuaternion(robot_torso_quat()).toRotationMatrix();
+    init_rot_ = robot_yaw * ref_yaw.transpose();
+
+    // 3) 清零上一步动作反馈（last_action 观测）
+    env->action_manager->reset();
+
+    spdlog::info("[fight1] Replay triggered (frame -> 0)");
 }
 
 

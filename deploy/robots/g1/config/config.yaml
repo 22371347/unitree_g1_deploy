@@ -119,7 +119,8 @@ FSM:
   # 动作模仿：motion.npz 逐帧播放（fps=50 与策略 50Hz 同步）
   # 观测 154 维：[command(58)+anchor_ori(6)+ang_vel(3)+joint_pos(29)+joint_vel(29)+actions(29)]
   # 输入：obs + time_step(=motion帧索引)；动作 target=default+action_scale*action
-  # 手柄 RB + A 从 FixStand / Velocity 切入；motion 播完（once）自动切 end_state
+  # 手柄 RB + A 从 FixStand / Velocity 切入；进入后先站立（motion 末帧），
+  # 按 RB+A 或键盘 r 触发从头播放动作，播完回到末帧站立保持
   Fight1:
     transitions:
       Passive: LT + B.on_pressed
@@ -127,8 +128,6 @@ FSM:
       Velocity: RT + A.on_pressed
     policy_dir: config/policy/fight1
     motion_file: config/policy/fight1/motion/motion.npz
-    motion_mode: hold   # once(播完切走)/ loop(循环) / hold(保持最后一帧)
-    end_state: Velocity
 
 # =====================================================================
 #  健康日志 (g1_health_logger)
@@ -141,3 +140,5 @@ health_log:
   print_hz: 1.0
   ring_seconds: 30.0
   enable_bms: true
+
+

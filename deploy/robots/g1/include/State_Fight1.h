@@ -17,7 +17,8 @@
  *   - 动作: target = default_joint_pos + action_scale * action（模型顺序）
  *   - 关节顺序: IsaacLab 模型顺序 == motion.npz 顺序，经 joint_ids_map 重映射
  *
- * motion 播放模式: once（播完切 end_state）/ loop（循环）/ hold（保持最后一帧）
+ * 行为: 进入后停在 motion 最后一帧站立（末帧==首帧==站姿，静止）；
+ *      RB + A（或键盘 r）触发从首帧重新播放；播完回到末帧站立保持。
  */
 class State_Fight1 : public FSMState
 {
@@ -38,6 +39,7 @@ public:
 
 private:
     void advance_frame();
+    void replay_motion();                     // 重播：帧回零 + 重新对齐 + 清 last_action
     Eigen::Quaternionf robot_torso_quat();    // IMU(pelvis) 朝向 + 腰部关节 -> torso 朝向
     Eigen::Quaternionf motion_torso_quat();   // motion root(pelvis) + 腰部关节 -> torso 朝向
     std::unordered_map<std::string, std::vector<float>> build_obs_map();
@@ -50,8 +52,6 @@ private:
 
     int frame_ = 0;               // 当前 motion 帧
     int num_frames_ = 0;
-    std::string motion_mode_ = "hold";   // once / loop / hold
-    std::string end_state_ = "Velocity";
 
     // 腰部关节在模型 joint_names（IsaacLab 序）中的索引，从 ONNX metadata 解析
     int waist_yaw_idx_   = 2;
@@ -60,6 +60,9 @@ private:
 
     // 初始偏航对齐（世界系 -> 机器人初始朝向系），消除机器人与 motion 初始朝向差
     Eigen::Matrix3f init_rot_ = Eigen::Matrix3f::Identity();
+
+    // 重播信号（RB + A 同时按下）边沿检测
+    bool last_restart_key_ = false;
 };
 
 
