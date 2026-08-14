@@ -152,6 +152,10 @@ python scripts/play.py Unitree-G1-Tracking-No-State-Estimation --motion_file=src
 
 一个待部署的 ONNX 策略要接入本框架，一般需要完成以下 5 步：
 
+> 📌 **工作方式**：默认 `config.yaml` 只保留当前核心策略。要接入新策略时，请【复制 `config.yaml`
+> 为 `config_<策略名>.yaml`】并在其中新增/修改该策略的状态与配置（用 `--config` 启动），
+> 而不是直接修改默认文件——见下方“多配置并行测试”。
+
 1. **准备策略文件**：将训练导出的 `policy.onnx` 与 `policy.onnx.data` 放入
    `deploy/robots/g1/config/policy/<策略名>/exported/`
 2. **编写部署配置** `deploy/robots/g1/config/policy/<策略名>/params/deploy.yaml`：
@@ -172,7 +176,7 @@ python scripts/play.py Unitree-G1-Tracking-No-State-Estimation --motion_file=src
 
 > [!TIP]
 > `config.yaml` 内已内置完整的注册引导注释与可直接照抄的示例
-> （`Velocity` = RLBase 示例，`Fight` / `AMP` = 策略状态示例）。
+> （`Velocity` = RLBase 示例，`Fight1` / `AMP` = 策略状态示例）。
 
 #### 多配置并行测试（配置预设）
 
@@ -181,13 +185,13 @@ python scripts/play.py Unitree-G1-Tracking-No-State-Estimation --motion_file=src
 
 ```bash
 cd deploy/robots/g1/build
-./g1_ctrl -n lo -c config_fight.yaml     # 仿真，fight 策略
+./g1_ctrl -n lo -c config_fight1.yaml    # 仿真，fight1（WBT）策略
 ./g1_ctrl -n lo -c config_AMP.yaml       # 仿真，AMP 策略
-./g1_ctrl -c config_fight.yaml           # 实机（默认 DDS 配置）
+./g1_ctrl -c config_fight1.yaml          # 实机（默认 DDS 配置）
 ```
 
 - 未指定 `--config` 时默认加载 `config.yaml`。
-- 各预设共享公共状态（`Passive` / `FixStand` / `Velocity`），仅在启用的策略状态（`Fight` / `AMP` / …）上不同，
+- 各预设共享公共状态（`Passive` / `FixStand` / `Velocity`），仅在启用的策略状态（`Fight1` / `AMP` / …）上不同，
   编辑时请保持公共部分一致。
 
 #### 4.2 Sim2Real：MuJoCo 仿真验证

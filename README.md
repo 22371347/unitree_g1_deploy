@@ -154,6 +154,10 @@ python scripts/play.py Unitree-G1-Tracking-No-State-Estimation --motion_file=src
 
 To integrate a new ONNX policy into this framework, generally complete the following 5 steps:
 
+> 📌 **Workflow**: keep the default `config.yaml` for the current core policy only. To add a new
+> policy, **copy `config.yaml` to `config_<policy_name>.yaml`** and add the new state there (launch
+> with `--config`), instead of editing the default file — see *Parallel Testing* below.
+
 1. **Prepare the policy files**: place the exported `policy.onnx` and `policy.onnx.data` into
    `deploy/robots/g1/config/policy/<policy_name>/exported/`
 2. **Write the deployment config** `deploy/robots/g1/config/policy/<policy_name>/params/deploy.yaml`:
@@ -175,7 +179,7 @@ To integrate a new ONNX policy into this framework, generally complete the follo
 
 > [!TIP]
 > `config.yaml` already contains a complete registration guide comment and ready-to-copy examples
-> (`Velocity` = RLBase example, `Fight` / `AMP` = policy state examples).
+> (`Velocity` = RLBase example, `Fight1` / `AMP` = policy state examples).
 
 #### Parallel Testing with Config Presets
 
@@ -186,14 +190,14 @@ no recompile:
 
 ```bash
 cd deploy/robots/g1/build
-./g1_ctrl -n lo -c config_fight.yaml     # simulation, fight policy
+./g1_ctrl -n lo -c config_fight1.yaml    # simulation, fight1 (WBT) policy
 ./g1_ctrl -n lo -c config_AMP.yaml       # simulation, AMP policy
-./g1_ctrl -c config_fight.yaml           # real robot (default DDS config)
+./g1_ctrl -c config_fight1.yaml          # real robot (default DDS config)
 ```
 
 - `config.yaml` is loaded by default when `--config` is omitted.
 - Each preset shares the common states (`Passive` / `FixStand` / `Velocity`) and only differs in the
-  enabled policy states (`Fight` / `AMP` / ...) — keep the common parts consistent when editing.
+  enabled policy states (`Fight1` / `AMP` / ...) — keep the common parts consistent when editing.
 
 #### 4.2 Sim2Real: MuJoCo Simulation Validation
 

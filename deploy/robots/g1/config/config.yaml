@@ -1,11 +1,14 @@
 # =====================================================================
 #  FSM 状态机配置 —— 注册新策略指南
 # =====================================================================
-#  切换配置文件：可复制本文件为 config_<策略名>.yaml 作为命名预设，
-#  启动时用 --config 选择，无需反复复制粘贴：
-#      ./g1_ctrl -c config_fight.yaml   (仿真用 -n lo)
+#  ⭐ 工作方式（重要）：
+#    默认 config.yaml 只保留【当前正在用的核心策略】。
+#    要接入新策略时，【复制本文件为 config_<策略名>.yaml】并在其中新增/修改该
+#    策略的状态与配置，而不是直接在 config.yaml 里新增，避免互相干扰。
+#    切换时用 --config 选择：
+#      ./g1_ctrl -c config_fight1.yaml   (仿真用 -n lo)
 #      ./g1_ctrl -c config_AMP.yaml
-#  未指定时默认加载 config.yaml。
+#    未指定时默认加载 config.yaml。
 #
 #  一个待部署的 ONNX 策略要接入本框架，通常需要完成以下 5 步：
 #
@@ -23,12 +26,13 @@
 #        observations      : 观测项配置，【各项的书写顺序即 ONNX 模型输入张量的拼接顺序】，务必与训练一致
 #        【注意】关节映射与观测顺序不匹配是部署后动作异常的最常见原因。
 #
-#  (3) 在下方 FSM._ 中注册新状态：给它一个【不与现有状态冲突的 id】，并指定 type：
+#  (3) 在 config_<策略名>.yaml 的 FSM._ 中注册新状态：给它一个【不与现有状态冲突的 id】，
+#      并指定 type：
 #        type: RLBase      -> 速度控制等“无参考轨迹”的策略（State_RLBase）
 #        type: Mimic       -> 动作模仿策略，需要额外提供 motion_file 参考轨迹 npz（State_Mimic）
 #        type: <自定义>     -> 若观测逻辑差异较大，见步骤(5)
 #
-#  (4) 添加该状态自己的配置块（transitions 手柄切换、policy_dir 等），参考下方 Velocity / Fight 示例。
+#  (4) 添加该状态自己的配置块（transitions 手柄切换、policy_dir 等），参考下方 Velocity / Fight1 示例。
 #
 #  (5) 观测逻辑差异较大时的自定义实现：
 #       在 deploy/robots/g1/include/ 和 deploy/robots/g1/src/ 下编写 State_<名字>.h/.cpp
@@ -45,10 +49,10 @@ FSM:
     Velocity:
       id: 3
       type: RLBase
-    # Fight 拳击策略：速度指令驱动 + 5帧历史观测，同 RLBase 类型
-    Fight:
+    # Fight1 全身动作跟踪策略（WBT G1 model_46500），自定义 State_Fight1
+    Fight1:
       id: 5
-      type: RLBase
+      type: Fight1
     # ---- 示例：再新增一个策略状态（以 type: RLBase 为例）----
     # MyNewPolicy:
     #   id: 9          # 唯一 id，不要与现有 id 重复
@@ -78,7 +82,7 @@ FSM:
     transitions: 
       Passive: LT + B.on_pressed
       Velocity: RT + A.on_pressed
-      Fight: RB + A.on_pressed
+      Fight1: RB + A.on_pressed
     kp: [
       100,100,100,150,40,40,
       100,100,100,150,40,40,
@@ -94,8 +98,8 @@ FSM:
       10,10,10,10,10,10,10,
     ]
     ts: [0, 2]
-    # qs 按 qpos 顺序（与 FixStand kp/kd 一致），目标姿态 = Fight 拳击初始站姿
-    # （由 fight deploy.yaml 的 default_joint_pos 经 beyondmimic->qpos 重排得到）
+    # qs 按 qpos 顺序（与 FixStand kp/kd 一致），目标姿态 = 拳击预备站姿
+    # （与 fight1 的 motion.npz 起始姿态一致，由 motion[0] 经模型序->qpos 重排得到）
     qs: [
       [],
       [-1.0, 0.268, 0.169, 0.904, -0.256, -0.0638, -1.0, -0.268, -0.169, 0.904, -0.256, 0.0638, 0.0, 0.0, 0.0, -0.924, 0.133, 0.1, -0.233, -0.226, -0.234, 0.579, -0.924, -0.133, -0.1, -0.233, 0.226, -0.234, -0.579]
@@ -108,23 +112,29 @@ FSM:
     transitions: 
       Passive: LT + B.on_pressed
       FixStand: LT + up.on_pressed
-      Fight: RB + A.on_pressed
+      Fight1: RB + A.on_pressed
     policy_dir: config/policy/velocity
 
-  # ---- Fight 拳击策略（type: RLBase，速度指令驱动 + 5帧历史）----
-  # 手柄 RB + A 从 Velocity 切入；指令速度带 max_acceleration 限速（见 deploy.yaml）
-  Fight:
+  # ---- Fight1 全身动作跟踪策略（type: Fight1，自定义 State，id=5 默认核心策略）----
+  # 动作模仿：motion.npz 逐帧播放（fps=50 与策略 50Hz 同步）
+  # 观测 154 维：[command(58)+anchor_ori(6)+ang_vel(3)+joint_pos(29)+joint_vel(29)+actions(29)]
+  # 输入：obs + time_step(=motion帧索引)；动作 target=default+action_scale*action
+  # 手柄 RB + A 从 FixStand / Velocity 切入；motion 播完（once）自动切 end_state
+  Fight1:
     transitions:
       Passive: LT + B.on_pressed
       FixStand: LT + up.on_pressed
       Velocity: RT + A.on_pressed
-    policy_dir: config/policy/fight
+    policy_dir: config/policy/fight1
+    motion_file: config/policy/fight1/motion/motion.npz
+    motion_mode: hold   # once(播完切走)/ loop(循环) / hold(保持最后一帧)
+    end_state: Velocity
 
 # =====================================================================
 #  健康日志 (g1_health_logger)
 # =====================================================================
 health_log:
-  enabled: true
+  enabled: false
   out_dir: logs/g1_health
   control_hz: 1000.0
   log_hz: 50.0
