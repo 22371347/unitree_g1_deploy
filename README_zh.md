@@ -165,6 +165,10 @@ python scripts/play.py Unitree-G1-Tracking-No-State-Estimation --motion_file=src
    - `actions`：动作配置（`target = action * scale + offset`）
    - `observations`：观测项配置，**书写顺序即 ONNX 输入张量的拼接顺序，必须与训练一致**
    - > ⚠️ 关节映射 / 观测顺序不匹配，是部署后动作异常的最常见原因。
+   - > ⚠️ **历史观测布局**也必须与训练一致：部署 `use_gym_history: true` = 按帧组织
+     （`[帧0: 全部项, 帧1: 全部项, ...]`，mjlab `history_ordering="time"`）；`false` = 按项组织
+     （`[项0: 全部帧, 项1: 全部帧, ...]`，IsaacLab `concatenate_terms`）。
+     布局错误会让策略收到错乱观测却照常推理（无报错）→ 抽搐 / 无法响应。
 3. **注册 FSM 状态**：在 `deploy/robots/g1/config/config.yaml` 的 `FSM._` 中新增状态，指定**唯一 id** 与 `type`：
    - `type: RLBase` —— 无参考轨迹的策略（如速度控制，对应 `State_RLBase`）
    - `type: Mimic` —— 动作模仿策略，需额外提供 `motion_file`（对应 `State_Mimic`）

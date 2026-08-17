@@ -167,6 +167,10 @@ To integrate a new ONNX policy into this framework, generally complete the follo
    - `actions`: action config (`target = action * scale + offset`)
    - `observations`: observation config; **the written order is the concatenation order of the ONNX input tensor and must match training**
    - > ⚠️ A mismatch in joint mapping / observation order is the most common cause of abnormal behavior after deployment.
+   - > ⚠️ **History layout** must match training too: deploy `use_gym_history: true` = frame-major
+     (`[frame0: all terms, frame1: ...]`, mjlab `history_ordering="time"`); `false` = term-major
+     (`[term0: all frames, term1: ...]`, IsaacLab `concatenate_terms`).
+     A wrong layout scrambles the observations but the policy still runs without error → twitching / no response.
 3. **Register the FSM state**: add a new state in the `FSM._` section of `deploy/robots/g1/config/config.yaml`, with a **unique id** and `type`:
    - `type: RLBase` — policies without a reference trajectory (e.g. velocity tracking, `State_RLBase`)
    - `type: Mimic` — motion imitation; additionally requires `motion_file` (`State_Mimic`)

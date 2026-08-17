@@ -384,5 +384,26 @@
   <worldbody>
     <light pos="1 0 3.5" dir="0 0 -1" directional="true"/>
     <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"/>
+
+    <!-- ============================================================
+         越障测试障碍物（静态刚体，直接在 worldbody 下、无 body -> 固定不可移动）
+         坐标约定：z=0 为地面；x=前进方向（机器人初始在原点、朝 +x）
+         常用几何类型：
+           box      : size=(半长x, 半长y, 半高z)，pos 为该盒中心坐标
+           cylinder : size=(半径, 半长)，默认轴沿 z，euler 旋转可横放
+           sphere   : size=(半径,)
+         碰撞：默认 contype=1 conaffinity=1，会自动与机器人碰撞
+         调整：改 pos(位置) / size(尺寸) / rgba(颜色)，不需要的要整行注释掉
+         ============================================================ -->
+    <!-- 1) 低台阶（跨过）：顶面 z = pos.z + size.z = 0.10 -->
+    <geom type="box" name="step_low" pos="-1.0 0 0.05" size="0.3 0.3 0.05" rgba="0.9 0.4 0.2 1"/>
+    <!-- 2) 中箱（爬上/跨过）：顶面 z = 0.20 -->
+    <geom type="box" name="box_mid" pos="-1.8 0 0.10" size="0.4 0.4 0.10" rgba="0.9 0.7 0.2 1"/>
+    <!-- 3) 高箱（爬越）：顶面 z = 0.30 -->
+    <geom type="box" name="box_high" pos="-2.8 0 0.15" size="0.5 0.5 0.15" rgba="0.8 0.2 0.5 1"/>
+    <!-- 4) 圆木（跨过，横放）：cylinder 绕 x 转 90° 使其沿 y 轴躺地，中心 z = 半径 -->
+    <geom type="cylinder" name="log" pos="3.6 0 0.08" size="0.08 0.5" euler="1.5708 0 0" rgba="0.6 0.4 0.2 1"/>
+    <!-- 5) 坡道（斜坡）：box 绕 y 轴倾斜（pitch），euler 第二个值 = 坡度 -->
+    <geom type="box" name="ramp" pos="4.5 0 0.12" size="0.5 0.4 0.03" euler="0 -0.25 0" rgba="0.3 0.7 0.3 1"/>
   </worldbody>
 </mujoco>

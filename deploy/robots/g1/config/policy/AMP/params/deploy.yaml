@@ -2,10 +2,9 @@
 # AMP 运行策略部署配置
 # ============================================================
 # 模型：4 帧历史观测（384 维）+ 29 维动作（由 ONNX 实测确认）
-#   - 观测：6 项 × 4 帧历史，按项连续拼接（term-wise）共 384 维
-#     [base_ang_vel(12) + projected_gravity(12) + command(12)
-#      + joint_pos(116) + joint_vel(116) + actions(116)]
-#     （与 IsaacLab concatenate_terms=True 一致，勿用 use_gym_history）
+#   - 观测：6 项 × 4 帧历史，time-major 布局（每帧所有观测项按时间组织）共 384 维
+#     [t0: ang+grav+cmd+jpos+jvel+act, t1: 同上, t2: 同上, t3: 同上]
+#     （训练 mjlab 使用 history_ordering="time"，故部署必须 use_gym_history: true）
 #   - 动作：29 维关节位置指令，mjlab G1 顺序 == 硬件 qpos 顺序
 # ============================================================
 
@@ -113,7 +112,9 @@ observations:
     scale: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
             1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
     history_length: 4
-  # 与 IsaacLab concatenate_terms=True 一致：按项拼接（term-wise），不要用 gym 式块拼接
-  use_gym_history: false
+  # 训练（mjlab history_ordering="time"）是 time-major 布局：
+  # 按帧 h 外层、按观测项内层拼接。必须 use_gym_history: true，
+  # 否则 384 维输入元素顺序与 ONNX 不一致，策略会收到错乱观测。
+  use_gym_history: true
 
 
