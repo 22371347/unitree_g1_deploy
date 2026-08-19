@@ -1,0 +1,99 @@
+# =====================================================================
+#  fight2 策略预设 (config_fight2.yaml) —— 足锁推动作策略
+#  启动: ./g1_ctrl -n lo -c config_fight2.yaml
+#  说明: fight2 = AMP_mjlab G8 left-feiti footlock push (model_14100)
+#        动作跟踪策略（State_Fight2，观测 154 维，qpos 关节序，无 time_step）
+#  切换: 键盘 a/b/c/d(=Fight2) 或手柄；进入后站立，RB+A 或键盘 r 触发足锁推动作
+# =====================================================================
+
+FSM:
+  _: # enabled fsms
+    Passive:
+      id: 1
+    FixStand:
+      id: 2
+    Velocity:
+      id: 3
+      type: RLBase
+    # Fight2 足锁推动作策略（自定义 State_Fight2）
+    Fight2:
+      id: 5
+      type: Fight2
+
+  Passive:
+    transitions:
+      FixStand: LT + up.on_pressed
+    mode: [
+      1,1,1,1,1,1,
+      1,1,1,1,1,1,
+      1,1,1,
+      1,1,1,1,1,1,1,
+      1,1,1,1,1,1,1,
+    ]
+    kd: [
+      3,3,3,3,3,3,
+      3,3,3,3,3,3,
+      3,3,3,
+      3,3,3,3,3,3,3,
+      3,3,3,3,3,3,3,
+    ]
+
+  # 默认站立姿态（qpos 顺序，取自 fight2 motion 的 deployment_stance_joint_pos）
+  FixStand:
+    transitions:
+      Passive: LT + B.on_pressed
+      Velocity: RT + A.on_pressed
+      Fight2: RB + A.on_pressed
+    kp: [
+      100,100,100,150,40,40,
+      100,100,100,150,40,40,
+      200,200,200,
+      40,40,40,40,40,40,40,
+      40,40,40,40,40,40,40,
+    ]
+    kd: [
+      2,2,2,4,2,2,
+      2,2,2,4,2,2,
+      5,5,5,
+      10,10,10,10,10,10,10,
+      10,10,10,10,10,10,10,
+    ]
+    ts: [0, 2]
+    qs: [
+      [],
+      [-0.645,0.151,0.001,0.938,-0.27,-0.098,-0.415,-0.254,-0.209,1.025,-0.572,0.076,0.0,0.0,0.0,-0.728,0.108,-0.009,0.088,-0.126,-0.066,-0.025,-0.755,-0.224,0.241,-0.088,0.126,-0.066,0.031]
+    ]
+
+  Velocity:
+    transitions:
+      Passive: LT + B.on_pressed
+      FixStand: LT + up.on_pressed
+      Fight2: RB + A.on_pressed
+    policy_dir: config/policy/velocity
+
+  # ---- Fight2 足锁推动作策略（type: Fight2，自定义 State）----
+  # 观测 154 维：[ref_q(29)+ref_dq(29)+anchor_ori6(6)+gyro(3)+q-default(29)+dq(29)+last_action(29)]
+  # 输入仅 obs（无 time_step）；动作 target=default+action_scale*actions（qpos 序）
+  # 手柄 RB + A 从 FixStand/Velocity 切入；进入后先站立（motion 末帧），
+  # 按 RB+A 或键盘 r 触发足锁推动作，播完回到末帧站立保持
+  # motion_file 用 motion_deploy.npz：原 npz 含 bool/字符串数组（foot_contact/deployment_*）
+  # 导致 cnpy 解析失败（failed fread），motion_deploy.npz 仅含 4 个 float 数组（joint_pos/joint_vel/body_pos_w/body_quat_w）
+  Fight2:
+    transitions:
+      Passive: LT + B.on_pressed
+      FixStand: LT + up.on_pressed
+      Velocity: RT + A.on_pressed
+    policy_dir: config/policy/fight2
+    motion_file: config/policy/fight2/motion/motion_deploy.npz
+
+# =====================================================================
+#  健康日志 (g1_health_logger)
+# =====================================================================
+health_log:
+  enabled: true
+  out_dir: logs/g1_health
+  control_hz: 1000.0
+  log_hz: 50.0
+  print_hz: 1.0
+  ring_seconds: 30.0
+  enable_bms: true

@@ -1,0 +1,180 @@
+# =====================================================================
+#  中和策略预设 (config_fight_all.yaml) —— fight + fight1 + fight2 + AMP 倒地恢复
+#  启动: ./g1_ctrl -n lo -c config_fight_all.yaml
+# =====================================================================
+#  状态与自动流程:
+#   - Fight  (id 5, RLBase, 速度指令拳击): 手动进入/基础策略
+#   - Fight1 (id 6, State_Fight1, WBT 拳击动作): 按键触发一次性播放 -> 播完自动回 Fight
+#   - Fight2 (id 7, State_Fight2, 足锁推动作):  按键触发一次性播放 -> 播完自动回 Fight
+#   - Recovery (id 8, RLBase, AMP 倒地恢复): 任一策略摔倒自动切入 -> 恢复站立自动回 Fight
+#
+#  自动切换:
+#   - Fight / Fight1 / Fight2 摔倒（倾角>50° 或 高度<0.35m 持续100ms） -> Recovery
+#   - Recovery 恢复站立（直立+高度≥0.55+角速度<1.0 持续500ms）         -> Fight
+#   - Fight1 / Fight2 触发播放并播完后自动回 Fight
+#
+#  手动切换（手柄）:
+#   - FixStand: RB+A=Fight, LB+A=Fight1, RB+B=Fight2, RT+A=Velocity, LT+B=Passive
+#   - 键盘: a=Passive b=FixStand c=Velocity d=Fight(5) e=Fight1(6) f=Fight2(7)
+# =====================================================================
+
+FSM:
+  _: # enabled fsms
+    Passive:
+      id: 1
+    FixStand:
+      id: 2
+    Velocity:
+      id: 3
+      type: RLBase
+    Fight:
+      id: 5
+      type: RLBase
+    Fight1:
+      id: 6
+      type: Fight1
+    Fight2:
+      id: 7
+      type: Fight2
+    Recovery:
+      id: 8
+      type: RLBase
+
+  Passive:
+    transitions:
+      FixStand: LT + up.on_pressed
+    mode: [
+      1,1,1,1,1,1,
+      1,1,1,1,1,1,
+      1,1,1,
+      1,1,1,1,1,1,1,
+      1,1,1,1,1,1,1,
+    ]
+    kd: [
+      3,3,3,3,3,3,
+      3,3,3,3,3,3,
+      3,3,3,
+      3,3,3,3,3,3,3,
+      3,3,3,3,3,3,3,
+    ]
+
+  # 默认站立姿态（qpos 顺序，所有策略统一站姿）
+  FixStand:
+    transitions:
+      Passive: LT + B.on_pressed
+      Velocity: RT + A.on_pressed
+      Fight: RB + A.on_pressed
+      Fight1: LB + A.on_pressed
+      Fight2: RB + B.on_pressed
+    kp: [
+      100,100,100,150,40,40,
+      100,100,100,150,40,40,
+      200,200,200,
+      40,40,40,40,40,40,40,
+      40,40,40,40,40,40,40,
+    ]
+    kd: [
+      2,2,2,4,2,2,
+      2,2,2,4,2,2,
+      5,5,5,
+      10,10,10,10,10,10,10,
+      10,10,10,10,10,10,10,
+    ]
+    ts: [0, 2]
+    qs: [
+      [],
+      [-0.645,0.151,0.001,0.938,-0.27,-0.098,-0.415,-0.254,-0.209,1.025,-0.572,0.076,0.0,0.0,0.0,-0.728,0.108,-0.009,0.088,-0.126,-0.066,-0.025,-0.755,-0.224,0.241,-0.088,0.126,-0.066,0.031]
+    ]
+
+  Velocity:
+    transitions:
+      Passive: LT + B.on_pressed
+      FixStand: LT + up.on_pressed
+      Fight: RB + A.on_pressed
+      Fight1: LB + A.on_pressed
+      Fight2: RB + B.on_pressed
+    policy_dir: config/policy/velocity
+
+  # ---- Fight 拳击（基础策略，速度指令驱动 + 5帧历史）----
+  # 摔倒自动切 Recovery
+  Fight:
+    transitions:
+      Passive: LT + B.on_pressed
+      FixStand: LT + up.on_pressed
+      Velocity: RT + A.on_pressed
+      Fight1: LB + A.on_pressed
+      Fight2: RB + B.on_pressed
+    policy_dir: config/policy/fight
+    enable_bad_orientation_check: false
+    fall_detection:
+      target: Recovery
+      max_tilt: 0.872665     # 50 度
+      min_height: 0.35
+      height_enabled: true
+      confirm_ms: 100
+
+  # ---- Fight1 拳击动作（State_Fight1，按键触发一次性播放，播完自动回 Fight）----
+  Fight1:
+    transitions:
+      Passive: LT + B.on_pressed
+      FixStand: LT + up.on_pressed
+      Velocity: RT + A.on_pressed
+      Fight: RB + A.on_pressed
+    policy_dir: config/policy/fight1
+    motion_file: config/policy/fight1/motion/motion.npz
+    enable_bad_orientation_check: false
+    fall_detection:
+      target: Recovery
+      max_tilt: 0.872665
+      min_height: 0.35
+      height_enabled: true
+      confirm_ms: 100
+    end_state: Fight     # 播放完毕自动回 Fight
+
+  # ---- Fight2 足锁推动作（State_Fight2，按键触发一次性播放，播完自动回 Fight）----
+  Fight2:
+    transitions:
+      Passive: LT + B.on_pressed
+      FixStand: LT + up.on_pressed
+      Velocity: RT + A.on_pressed
+      Fight: RB + A.on_pressed
+    policy_dir: config/policy/fight2
+    motion_file: config/policy/fight2/motion/motion_deploy.npz
+    enable_bad_orientation_check: false
+    fall_detection:
+      target: Recovery
+      max_tilt: 0.872665
+      min_height: 0.35
+      height_enabled: true
+      confirm_ms: 100
+    end_state: Fight     # 播放完毕自动回 Fight
+
+  # ---- Recovery AMP 倒地恢复（恢复站立后统一回 Fight）----
+  Recovery:
+    transitions:
+      Passive: LT + B.on_pressed
+      FixStand: LT + up.on_pressed
+      Velocity: RT + A.on_pressed
+      Fight: RB + A.on_pressed
+    policy_dir: config/policy/amp_recovery
+    enable_bad_orientation_check: false
+    recovery_gate:
+      target: Fight
+      min_height: 0.55
+      max_tilt: 0.30
+      max_root_ang_vel: 1.0
+      height_enabled: true
+      require_height_source: false
+      confirm_ms: 500
+
+# =====================================================================
+#  健康日志 (g1_health_logger)
+# =====================================================================
+health_log:
+  enabled: true
+  out_dir: logs/g1_health
+  control_hz: 1000.0
+  log_hz: 50.0
+  print_hz: 1.0
+  ring_seconds: 30.0
+  enable_bms: true

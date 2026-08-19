@@ -130,3 +130,4 @@ health_log:
   print_hz: 1.0
   ring_seconds: 30.0
   enable_bms: true
+

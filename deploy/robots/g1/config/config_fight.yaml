@@ -49,6 +49,10 @@ FSM:
     Fight:
       id: 5
       type: RLBase
+    # Recovery 恢复策略：Fight 摔倒自动切入（fall_detection），恢复站立后自动回 Fight
+    Recovery:
+      id: 6
+      type: RLBase
     # ---- 示例：再新增一个策略状态（以 type: RLBase 为例）----
     # MyNewPolicy:
     #   id: 9          # 唯一 id，不要与现有 id 重复
@@ -112,12 +116,39 @@ FSM:
 
   # ---- Fight 拳击策略（type: RLBase，速度指令驱动 + 5帧历史）----
   # 手柄 RB + A 从 Velocity 切入；指令速度带 max_acceleration 限速（见 deploy.yaml）
+  # 摔倒自动触发 Recovery（fall_detection：倾角>50° 或高度<0.35m 持续 100ms）
   Fight:
     transitions:
       Passive: LT + B.on_pressed
       FixStand: LT + up.on_pressed
       Velocity: RT + A.on_pressed
     policy_dir: config/policy/fight
+    enable_bad_orientation_check: false   # 摔倒交给 fall_detection 更精细处理
+    fall_detection:
+      target: Recovery
+      max_tilt: 0.872665     # 50 度（弧度）
+      min_height: 0.35       # 米（仿真用高度）
+      height_enabled: true
+      confirm_ms: 100
+
+  # ---- Recovery 恢复策略（type: RLBase，AMP 恢复，config/policy/amp_recovery）----
+  # 由 Fight 摔倒自动切入；恢复站立（直立+高度≥0.55+角速度<1.0，持续 500ms）后自动回 Fight
+  Recovery:
+    transitions:
+      Passive: LT + B.on_pressed
+      FixStand: LT + up.on_pressed
+      Velocity: RT + A.on_pressed
+      Fight: RB + A.on_pressed   # 手柄手动返回（备用）
+    policy_dir: config/policy/amp_recovery
+    enable_bad_orientation_check: false   # 恢复过程中允许各种姿态
+    recovery_gate:
+      target: Fight
+      min_height: 0.55         # 米
+      max_tilt: 0.30           # 约 17 度（弧度）
+      max_root_ang_vel: 1.0    # rad/s
+      height_enabled: true
+      require_height_source: false
+      confirm_ms: 500
 
 # =====================================================================
 #  健康日志 (g1_health_logger)
@@ -130,3 +161,7 @@ health_log:
   print_hz: 1.0
   ring_seconds: 30.0
   enable_bms: true
+
+
+
+  

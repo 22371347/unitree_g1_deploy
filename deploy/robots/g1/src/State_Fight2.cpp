@@ -1,17 +1,17 @@
-#include "State_Fight1.h"
+#include "State_Fight2.h"
 #include "unitree_articulation.h"
 #include "isaaclab/envs/mdp/terminations.h"
 #include "g1_health_logger.h"
 #include <onnxruntime_cxx_api.h>
 #include <stdexcept>
 
-// 从 ONNX 模型的 joint_names metadata 中解析腰部关节索引（模型/IsaacLab 顺序），
+// 从 ONNX 模型的 joint_names metadata 中解析腰部关节索引（qpos 顺序），
 // 写入该策略的 MotionLoader_（供 motion_torso_quat 计算使用）
 static void load_waist_indices_from_onnx(const std::string& onnx_path,
-                                         std::shared_ptr<State_Fight1::MotionLoader_> loader)
+                                         std::shared_ptr<State_Fight2::MotionLoader_> loader)
 {
-    // 默认值（IsaacLab G1 模型顺序）
-    int yaw = 2, roll = 5, pitch = 8;
+    // 默认值（qpos G1 顺序）
+    int yaw = 12, roll = 13, pitch = 14;
     bool found = false;
 
     try {
@@ -40,19 +40,19 @@ static void load_waist_indices_from_onnx(const std::string& onnx_path,
             }
         }
     } catch (const std::exception& e) {
-        spdlog::warn("[fight1 waist_idx] Failed to read ONNX metadata: {}", e.what());
+        spdlog::warn("[fight2 waist_idx] Failed to read ONNX metadata: {}", e.what());
     }
 
     loader->waist_yaw_idx   = yaw;
     loader->waist_roll_idx  = roll;
     loader->waist_pitch_idx = pitch;
 
-    spdlog::info("[fight1] waist indices (model order): yaw={}, roll={}, pitch={}",
+    spdlog::info("[fight2] waist indices (model order): yaw={}, roll={}, pitch={}",
                  yaw, roll, pitch);
 }
 
 
-State_Fight1::State_Fight1(int state_mode, std::string state_string)
+State_Fight2::State_Fight2(int state_mode, std::string state_string)
 : FSMState(state_mode, state_string)
 {
     auto cfg = param::config["FSM"][state_string];
@@ -66,7 +66,7 @@ State_Fight1::State_Fight1(int state_mode, std::string state_string)
     // Motion
     motion_ = std::make_shared<MotionLoader_>(motion_file.string());
     num_frames_ = motion_->num_frames;
-    spdlog::info("[fight1] Loaded motion file '{}' frames={} duration={:.2f}s",
+    spdlog::info("[fight2] Loaded motion file '{}' frames={} duration={:.2f}s",
                  motion_file.filename().string(), num_frames_, motion_->duration);
 
     // env + alg
@@ -191,7 +191,7 @@ State_Fight1::State_Fight1(int state_mode, std::string state_string)
 }
 
 
-void State_Fight1::enter()
+void State_Fight2::enter()
 {
     // 设置增益（经 joint_ids_map 将模型顺序重映射到硬件顺序）
     for (int i = 0; i < env->robot->data.joint_stiffness.size(); ++i)
@@ -256,7 +256,7 @@ void State_Fight1::enter()
 }
 
 
-void State_Fight1::run()
+void State_Fight2::run()
 {
     auto action = env->action_manager->processed_actions();
     for (int i = 0; i < env->robot->data.joint_ids_map.size(); ++i) {
@@ -271,7 +271,7 @@ void State_Fight1::run()
 }
 
 
-void State_Fight1::advance_frame()
+void State_Fight2::advance_frame()
 {
     // 固定 hold 逻辑：从头播放，播到最后一帧（站立）后保持
     frame_ = std::min(frame_ + 1, num_frames_ - 1);
@@ -279,7 +279,7 @@ void State_Fight1::advance_frame()
 }
 
 
-void State_Fight1::replay_motion()
+void State_Fight2::replay_motion()
 {
     // 1) 帧回零：从动作开头重新播放
     frame_ = 0;
@@ -294,13 +294,13 @@ void State_Fight1::replay_motion()
     // 3) 清零上一步动作反馈（last_action 观测）
     env->action_manager->reset();
 
-    spdlog::info("[fight1] Replay triggered (frame -> 0)");
+    spdlog::info("[fight2] Replay triggered (frame -> 0)");
 }
 
 
 // 机器人 torso 朝向 = IMU(pelvis) 朝向 * 腰部关节旋转
 // 注：模拟器/实机 IMU 位于 pelvis（site "imu" 挂在 pelvis body），故需补偿腰
-Eigen::Quaternionf State_Fight1::robot_torso_quat()
+Eigen::Quaternionf State_Fight2::robot_torso_quat()
 {
     auto & motors = FSMState::lowstate->msg_.motor_state();
     Eigen::Quaternionf root_quat = env->robot->data.root_quat_w;
@@ -314,10 +314,10 @@ Eigen::Quaternionf State_Fight1::robot_torso_quat()
 
 
 // motion torso 朝向 = motion root(pelvis) 朝向 * motion 腰部关节旋转
-Eigen::Quaternionf State_Fight1::motion_torso_quat()
+Eigen::Quaternionf State_Fight2::motion_torso_quat()
 {
     auto root_quat = motion_->root_quaternion();
-    auto joint_pos = motion_->joint_pos();  // 模型顺序
+    auto joint_pos = motion_->joint_pos();  // qpos 顺序
 
     return root_quat
         * Eigen::AngleAxisf(joint_pos[waist_yaw_idx_],   Eigen::Vector3f::UnitZ())
@@ -326,13 +326,13 @@ Eigen::Quaternionf State_Fight1::motion_torso_quat()
 }
 
 
-std::unordered_map<std::string, std::vector<float>> State_Fight1::build_obs_map()
+std::unordered_map<std::string, std::vector<float>> State_Fight2::build_obs_map()
 {
-    // 1) command: motion 目标关节位置(29) + 目标关节速度(29)，模型顺序
+    // 1) command: motion 目标关节位置(29) + 目标关节速度(29)，qpos 顺序
     auto ref_q  = motion_->joint_pos();
     auto ref_dq = motion_->joint_vel();
 
-    // 2) motion_anchor_ori_b: inv(robot_torso) * aligned_motion_torso 旋转矩阵前两列
+    // 2) anchor_ori_6d: inv(robot_torso) * aligned_motion_torso 旋转矩阵前两列
     auto robot_torso = robot_torso_quat();
     auto ref_torso   = motion_torso_quat();
     // 用初始偏航对齐 motion 参考
@@ -342,10 +342,10 @@ std::unordered_map<std::string, std::vector<float>> State_Fight1::build_obs_map(
     // 与 sim2sim (numpy C-order) 一致: [R00,R01,R10,R11,R20,R21]
     float ori6[6] = {R(0,0), R(0,1), R(1,0), R(1,1), R(2,0), R(2,1)};
 
-    // 3) base_ang_vel: IMU 角速度（机体系）
+    // 3) base_gyro: IMU 角速度（机体系）
     auto & gyro = env->robot->data.root_ang_vel_b;
 
-    // 4/5) joint_pos_rel / joint_vel_rel（模型顺序，data 已经 joint_ids_map 重映射）
+    // 4/5) q-default / dq（qpos 顺序，data 已经 joint_ids_map 恒等重映射）
     auto & jpos     = env->robot->data.joint_pos;
     auto & jvel     = env->robot->data.joint_vel;
     auto & default_ = env->robot->data.default_joint_pos;
@@ -365,15 +365,15 @@ std::unordered_map<std::string, std::vector<float>> State_Fight1::build_obs_map(
     obs_vec.insert(obs_vec.end(), jvel.data(), jvel.data() + jvel.size());
     obs_vec.insert(obs_vec.end(), last.begin(), last.end());
 
+    // fight2 无 time_step 输入，只传 obs
     std::unordered_map<std::string, std::vector<float>> obs_map;
     obs_map["obs"] = obs_vec;
-    obs_map["time_step"] = std::vector<float>{static_cast<float>(frame_)};
     return obs_map;
 }
 
 
 // 从 unitree_mujoco 发布的 SportModeState 读取 root 高度（仿真用）；真机无高度源返回 false
-bool State_Fight1::read_base_height(float &height) const
+bool State_Fight2::read_base_height(float &height) const
 {
     if (!sport_mode_state || sport_mode_state->isTimeout())
     {
@@ -387,7 +387,7 @@ bool State_Fight1::read_base_height(float &height) const
 
 
 // 条件持续满足 confirm_ms 毫秒后才返回 true（防抖）
-bool State_Fight1::condition_confirmed(
+bool State_Fight2::condition_confirmed(
     bool condition,
     std::optional<std::chrono::steady_clock::time_point> &since,
     int confirm_ms

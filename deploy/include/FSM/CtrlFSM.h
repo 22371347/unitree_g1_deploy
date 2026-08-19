@@ -112,13 +112,13 @@ private:
         std::string key = FSMState::keyboard->key();
         if (!key.empty()) {
             //spdlog::info("FSM: Keyboard input received: {}", key);
-            // 使用键盘字母键 a, b, c, d... 切换状态
+            // 使用键盘字母键 a, b, c, d, e, f... 切换状态
             if (key == "a") nextStateMode = 1;   // Passive
             else if (key == "b") nextStateMode = 2; // FixStand
             else if (key == "c") nextStateMode = 3; // Velocity
             else if (key == "d") nextStateMode = 5; // 自定义动作
-
-            
+            else if (key == "e") nextStateMode = 6; // Fight1
+            else if (key == "f") nextStateMode = 7; // Fight2
         }
         
 

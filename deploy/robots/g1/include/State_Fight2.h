@@ -10,29 +10,27 @@
 #include <cnpy.h>
 
 /**
- * State_Fight1: WBT G1 全身动作跟踪策略 (model_46500)
+ * State_Fight2: G1 足锁推动作策略（AMP_mjlab G8 left-feiti footlock push, model_14100）
  *
- * 与 State_Mimic 类似，但观测结构与输入不同（按 sim2sim 权威实现）:
- *   - 观测 154 维（无历史、无归一化）:
- *       [command(58) + motion_anchor_ori_b(6) + base_ang_vel(3)
- *        + joint_pos_rel(29) + joint_vel_rel(29) + actions(29)]
- *     command          = motion 目标关节位置(29) + 目标关节速度(29)，模型顺序
- *     motion_anchor_ori_b = inv(robot_torso)*aligned_motion_torso 旋转矩阵前两列
- *   - 额外输入 time_step = motion 帧索引 (0~158)
- *   - 动作: target = default_joint_pos + action_scale * action（模型顺序）
- *   - 关节顺序: IsaacLab 模型顺序 == motion.npz 顺序，经 joint_ids_map 重映射
+ * 观测结构（与 fight1 同构，但关节序为 qpos 且无 time_step 输入）:
+ *   - 观测 154 维（无历史；归一化已嵌入 ONNX，喂原始观测）:
+ *       [ref_q(29) + ref_dq(29) + anchor_ori_6d(6) + base_gyro(3)
+ *        + q-default(29) + dq(29) + last_action(29)]
+ *   - 输入仅 obs[1,154]（无 time_step）
+ *   - 动作: target = default_joint_pos + action_scale * actions（qpos 序）
+ *   - 关节顺序: qpos（joint_ids_map 恒等）== motion.npz 顺序
  *
- * 行为: 进入后停在 motion 最后一帧站立（末帧==首帧==站姿，静止）；
+ * 行为: 进入后停在 motion 最后一帧站立（末帧==首帧==站姿，速度 0）；
  *      RB + A（或键盘 r）触发从首帧重新播放；播完自动切回 end_state（如 Fight）。
  * 配置（config yaml 中该状态块）:
  *   end_state                      : 播完自动切换的目标状态（如 Fight）
  *   enable_bad_orientation_check / bad_orientation_limit : 姿态保护
  *   fall_detection                 : 摔倒自动切目标（如 Recovery）
  */
-class State_Fight1 : public FSMState
+class State_Fight2 : public FSMState
 {
 public:
-    State_Fight1(int state_mode, std::string state_string);
+    State_Fight2(int state_mode, std::string state_string);
 
     void enter();
     void run();
@@ -68,10 +66,10 @@ private:
     int frame_ = 0;               // 当前 motion 帧
     int num_frames_ = 0;
 
-    // 腰部关节在模型 joint_names（IsaacLab 序）中的索引，从 ONNX metadata 解析
-    int waist_yaw_idx_   = 2;
-    int waist_roll_idx_  = 5;
-    int waist_pitch_idx_ = 8;
+    // 腰部关节在模型 joint_names（qpos 序）中的索引，从 ONNX metadata 解析（默认 qpos 序 12/13/14）
+    int waist_yaw_idx_   = 12;
+    int waist_roll_idx_  = 13;
+    int waist_pitch_idx_ = 14;
 
     // 初始偏航对齐（世界系 -> 机器人初始朝向系），消除机器人与 motion 初始朝向差
     Eigen::Matrix3f init_rot_ = Eigen::Matrix3f::Identity();
@@ -86,4 +84,4 @@ private:
 };
 
 
-REGISTER_FSM(State_Fight1)
+REGISTER_FSM(State_Fight2)
