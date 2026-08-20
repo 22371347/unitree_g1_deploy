@@ -78,7 +78,7 @@ State_Fight2::State_Fight2(int state_mode, std::string state_string)
     env->alg = std::make_unique<isaaclab::OrtRunner>(onnx_path);
     load_waist_indices_from_onnx(onnx_path.string(), motion_);
 
-    // ---- 姿态保护（可配置，默认开启）：倾角超限 -> Passive ----
+    // ---- 姿态保护（可配置，默认开启）：倾角超限 -> 目标状态（默认 Passive，可配 Recovery）----
     bool enable_bad_orientation_check = true;
     if (cfg["enable_bad_orientation_check"])
     {
@@ -91,22 +91,44 @@ State_Fight2::State_Fight2(int state_mode, std::string state_string)
         bad_orientation_limit =
             cfg["bad_orientation_limit"].as<float>();
     }
+    std::string bad_orientation_target = "Passive";
+    if (cfg["bad_orientation_target"])
+    {
+        bad_orientation_target =
+            cfg["bad_orientation_target"].as<std::string>();
+    }
+    int bad_orientation_confirm_ms = 0;
+    if (cfg["bad_orientation_confirm_ms"])
+    {
+        bad_orientation_confirm_ms =
+            cfg["bad_orientation_confirm_ms"].as<int>();
+    }
     if (enable_bad_orientation_check)
     {
+        if (!FSMStringMap.right.count(bad_orientation_target))
+        {
+            throw std::runtime_error(
+                "Unknown bad_orientation_target: " + bad_orientation_target
+            );
+        }
+        const int target_mode = FSMStringMap.right.at(bad_orientation_target);
         this->registered_checks.emplace_back(
-            std::make_pair(
-                [this, bad_orientation_limit]() -> bool
-                {
-                    return isaaclab::mdp::bad_orientation(
+            [this, bad_orientation_limit, bad_orientation_confirm_ms]() -> bool
+            {
+                return condition_confirmed(
+                    isaaclab::mdp::bad_orientation(
                         env.get(), bad_orientation_limit
-                    );
-                },
-                FSMStringMap.right.at("Passive")
-            )
+                    ),
+                    bad_orientation_since_,
+                    bad_orientation_confirm_ms
+                );
+            },
+            target_mode
         );
     }
 
-    // ---- 摔倒检测：倾角过大 / 高度过低（持续 confirm_ms）-> 自动切目标（如 Recovery）----
+    // ---- 摔倒检测：倾角过大（持续 confirm_ms）-> 自动切目标（如 Recovery）----
+    // 注：仅用 IMU 倾角判据（projected_gravity），不依赖高度（实机无 SportModeState 高度源）
     if (cfg["fall_detection"])
     {
         const auto fall_cfg = cfg["fall_detection"];
@@ -117,15 +139,7 @@ State_Fight2::State_Fight2(int state_mode, std::string state_string)
         const float max_tilt =
             fall_cfg["max_tilt"] ?
                 fall_cfg["max_tilt"].as<float>() :
-                0.523592f;   // 30 度
-        const float min_height =
-            fall_cfg["min_height"] ?
-                fall_cfg["min_height"].as<float>() :
-                0.35f;
-        const bool height_enabled =
-            fall_cfg["height_enabled"] ?
-                fall_cfg["height_enabled"].as<bool>() :
-                true;
+                0.872665f;   // 50 度
         const int confirm_ms =
             fall_cfg["confirm_ms"] ?
                 fall_cfg["confirm_ms"].as<int>() :
@@ -138,29 +152,14 @@ State_Fight2::State_Fight2(int state_mode, std::string state_string)
             );
         }
 
-        if (height_enabled && !sport_mode_state)
-        {
-            sport_mode_state = std::make_shared<
-                unitree::robot::go2::subscription::SportModeState
-            >();
-        }
-
         const int target_mode = FSMStringMap.right.at(target_name);
         this->registered_checks.emplace_back(
-            [this, max_tilt, min_height, height_enabled, confirm_ms]() -> bool
+            [this, max_tilt, confirm_ms]() -> bool
             {
                 const bool bad_tilt =
                     isaaclab::mdp::bad_orientation(env.get(), max_tilt);
-                bool low_height = false;
-                if (height_enabled)
-                {
-                    float base_height = 0.0f;
-                    low_height =
-                        read_base_height(base_height) &&
-                        base_height < min_height;
-                }
                 return condition_confirmed(
-                    bad_tilt || low_height,
+                    bad_tilt,
                     fall_condition_since_,
                     confirm_ms
                 );
@@ -204,11 +203,11 @@ void State_Fight2::enter()
     }
 
     env->robot->update();
-    // 进入后先站立：停在 motion 最后一帧（末帧 == 首帧 == 站姿，速度 0），
-    // 由 RB+A / 键盘 r 触发重新播放（见 replay_motion）
-    frame_ = num_frames_ - 1;
-    motion_->frame = frame_;
-    has_played_ = false;   // 未触发播放，播完回 end_state 的检查不生效
+    // 进入即从头播放动作（不再停在末帧等待触发），播完自动回 end_state
+    // RB+A / 键盘 r 仍可随时重新播放（见 replay_motion）
+    frame_ = 0;
+    motion_->frame = 0;
+    has_played_ = true;   // 进入即视为已触发播放，播完自动回 end_state
 
     // 初始偏航对齐：把 motion 参考旋转到机器人初始朝向系（消除两者初始偏航差）
     auto ref_yaw   = isaaclab::yawQuaternion(motion_->root_quaternion()).toRotationMatrix();

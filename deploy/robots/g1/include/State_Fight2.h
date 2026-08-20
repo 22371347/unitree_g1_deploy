@@ -20,8 +20,8 @@
  *   - 动作: target = default_joint_pos + action_scale * actions（qpos 序）
  *   - 关节顺序: qpos（joint_ids_map 恒等）== motion.npz 顺序
  *
- * 行为: 进入后停在 motion 最后一帧站立（末帧==首帧==站姿，速度 0）；
- *      RB + A（或键盘 r）触发从首帧重新播放；播完自动切回 end_state（如 Fight）。
+ * 行为: 进入即从头播放 motion；RB + A（或键盘 r）可随时重新播放；
+ *      播完自动切回 end_state（如 Fight）。
  * 配置（config yaml 中该状态块）:
  *   end_state                      : 播完自动切换的目标状态（如 Fight）
  *   enable_bad_orientation_check / bad_orientation_limit : 姿态保护
@@ -78,9 +78,10 @@ private:
     bool last_restart_key_ = false;
     bool has_played_ = false;   // 已触发过播放（用于播完自动回 end_state）
 
-    // 仿真 root 高度数据源（摔倒检测用）；真机为 nullptr
+    // 仿真 root 高度数据源（摔倒检测用）；真机为 nullptr（保留备用，当前不依赖高度）
     std::shared_ptr<unitree::robot::go2::subscription::SportModeState> sport_mode_state;
     std::optional<std::chrono::steady_clock::time_point> fall_condition_since_;
+    std::optional<std::chrono::steady_clock::time_point> bad_orientation_since_;
 };
 
 

@@ -1,11 +1,11 @@
 # ============================================================
-# fight1 全身动作跟踪策略（WBT G1）部署配置
+# fight_right 右飞踢全身动作跟踪策略（WBT G1）部署配置
 # ============================================================
-# 模型: policy.onnx (拳击WBT Trajectory7 model_30000, whole_body_tracking 训练)
+# 模型: policy.onnx (G9_rightfeiti_tail_direct_v2, whole_body_tracking 训练)
 # 观测 154 维（无历史、无归一化，原始值）:
 #   [command(58) + motion_anchor_ori_b(6) + base_ang_vel(3)
 #    + joint_pos_rel(29) + joint_vel_rel(29) + actions(29)]
-# 输入: obs[1,154] + time_step[1,1] = motion 帧索引 (0~158, 被模型 clip)
+# 输入: obs[1,154] + time_step[1,1] = motion 帧索引 (0~113, 被模型 clip)
 # 动作: target = default_joint_pos + action_scale * action
 # 关节顺序: IsaacLab G1 顺序（= ONNX joint_names = motion.npz 顺序）
 #   vs 硬件 qpos 顺序差异经 joint_ids_map 重映射

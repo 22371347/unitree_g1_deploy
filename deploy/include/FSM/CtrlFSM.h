@@ -46,7 +46,7 @@ public:
             add(state_instance);
         }
 
-        spdlog::info("Keyboard->joystick (sim): ↑/↓/←/→=move(ly/lx), q/e=turn(rx), z=stop(toggle); a/b/c/d=FSM switch");
+        spdlog::info("Keyboard->joystick (sim): ↑/↓/←/→=move(ly/lx), q/e=turn(rx), z=stop(toggle); a/b/c/d/e/f/g=FSM switch");
     }
 
     void start() 
@@ -119,6 +119,7 @@ private:
             else if (key == "d") nextStateMode = 5; // 自定义动作
             else if (key == "e") nextStateMode = 6; // Fight1
             else if (key == "f") nextStateMode = 7; // Fight2
+            else if (key == "g") nextStateMode = 9; // FightRight
         }
         
 

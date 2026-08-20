@@ -3,8 +3,9 @@
 #include "isaaclab/envs/mdp/observations/observations.h"
 #include "isaaclab/envs/mdp/actions/joint_actions.h"
 #include "g1_health_logger.h"
+#include <algorithm>
 #include <stdexcept>
-#include <unordered_map>
+#include <vector>
 
 namespace isaaclab
 {
@@ -13,22 +14,61 @@ namespace isaaclab
 REGISTER_OBSERVATION(keyboard_velocity_commands)
 {
     std::string key = FSMState::keyboard->key();
-    static auto cfg = env->cfg["commands"]["base_velocity"]["ranges"];
+    const auto cfg = env->cfg["commands"]["base_velocity"]["ranges"];
 
-    static std::unordered_map<std::string, std::vector<float>> key_commands = {
-        {"w", {1.0f, 0.0f, 0.0f}},
-        {"s", {-1.0f, 0.0f, 0.0f}},
-        {"a", {0.0f, 1.0f, 0.0f}},
-        {"d", {0.0f, -1.0f, 0.0f}},
-        {"q", {0.0f, 0.0f, 1.0f}},
-        {"e", {0.0f, 0.0f, -1.0f}}
-    };
-    std::vector<float> cmd = {0.0f, 0.0f, 0.0f};
-    if (key_commands.find(key) != key_commands.end())
+    const float vx_min = cfg["lin_vel_x"][0].as<float>();
+    const float vx_max = cfg["lin_vel_x"][1].as<float>();
+    const float vy_min = cfg["lin_vel_y"][0].as<float>();
+    const float vy_max = cfg["lin_vel_y"][1].as<float>();
+    const float wz_min = cfg["ang_vel_z"][0].as<float>();
+    const float wz_max = cfg["ang_vel_z"][1].as<float>();
+
+    std::vector<float> target_command = {0.0f, 0.0f, 0.0f};
+    if (key == "w") target_command = {vx_max, 0.0f, 0.0f};
+    if (key == "s") target_command = {vx_min, 0.0f, 0.0f};
+    if (key == "a") target_command = {0.0f, vy_max, 0.0f};
+    if (key == "d") target_command = {0.0f, vy_min, 0.0f};
+    if (key == "q") target_command = {0.0f, 0.0f, wz_max};
+    if (key == "e") target_command = {0.0f, 0.0f, wz_min};
+
+    // max_acceleration 由 export_deploy_cfg.py 从训练配置写入 deploy.yaml。
+    // 没有该字段的旧策略保持原始键盘指令，不改变旧部署行为。
+    const auto max_acceleration_node =
+        env->cfg["commands"]["base_velocity"]["max_acceleration"];
+    if (!max_acceleration_node)
     {
-        cmd = key_commands[key];
+        return target_command;
     }
-    return cmd;
+    const auto max_acceleration = max_acceleration_node.as<std::vector<float>>();
+    if (max_acceleration.size() != target_command.size())
+    {
+        throw std::runtime_error(
+            "base_velocity.max_acceleration must contain x, y, and yaw values."
+        );
+    }
+
+    // env->step_dt 是策略控制周期；每个周期最多改变 a_max * dt。
+    // 松开按键时 target_command 为 0，因此停止同样会经过减速斜坡。
+    static std::vector<float> filtered_command = {0.0f, 0.0f, 0.0f};
+    if (env->episode_length <= 1)
+    {
+        filtered_command = {0.0f, 0.0f, 0.0f};
+    }
+
+    for (std::size_t i = 0; i < filtered_command.size(); ++i)
+    {
+        const float max_step = max_acceleration[i] * env->step_dt;
+        if (max_step <= 0.0f)
+        {
+            throw std::runtime_error(
+                "base_velocity.max_acceleration values must be positive."
+            );
+        }
+        const float command_error = target_command[i] - filtered_command[i];
+        filtered_command[i] += std::clamp(command_error, -max_step, max_step);
+    }
+
+    return filtered_command;
 }
 
 }
@@ -74,7 +114,8 @@ State_RLBase::State_RLBase(int state_mode, std::string state_string)
         );
     }
 
-    // ---- 摔倒检测：倾角过大 / 高度过低（持续 confirm_ms）-> 切到目标状态（如 Recovery）----
+    // ---- 摔倒检测：倾角过大（持续 confirm_ms）-> 切到目标状态（如 Recovery）----
+    // 注：仅用 IMU 倾角判据（projected_gravity），不依赖高度（实机无 SportModeState 高度源）
     if (cfg["fall_detection"])
     {
         const auto fall_cfg = cfg["fall_detection"];
@@ -85,15 +126,7 @@ State_RLBase::State_RLBase(int state_mode, std::string state_string)
         const float max_tilt =
             fall_cfg["max_tilt"] ?
                 fall_cfg["max_tilt"].as<float>() :
-                0.523592f;   // 30 度
-        const float min_height =
-            fall_cfg["min_height"] ?
-                fall_cfg["min_height"].as<float>() :
-                0.35f;
-        const bool height_enabled =
-            fall_cfg["height_enabled"] ?
-                fall_cfg["height_enabled"].as<bool>() :
-                true;
+                0.872665f;   // 50 度
         const int confirm_ms =
             fall_cfg["confirm_ms"] ?
                 fall_cfg["confirm_ms"].as<int>() :
@@ -106,31 +139,14 @@ State_RLBase::State_RLBase(int state_mode, std::string state_string)
             );
         }
 
-        if (height_enabled && !sport_mode_state)
-        {
-            sport_mode_state = std::make_shared<
-                unitree::robot::go2::subscription::SportModeState
-            >();
-        }
-
         const int target_mode = FSMStringMap.right.at(target_name);
         this->registered_checks.emplace_back(
-            [this, max_tilt, min_height, height_enabled, confirm_ms]() -> bool
+            [this, max_tilt, confirm_ms]() -> bool
             {
                 const bool bad_tilt =
                     isaaclab::mdp::bad_orientation(env.get(), max_tilt);
-
-                bool low_height = false;
-                if (height_enabled)
-                {
-                    float base_height = 0.0f;
-                    low_height =
-                        read_base_height(base_height) &&
-                        base_height < min_height;
-                }
-
                 return condition_confirmed(
-                    bad_tilt || low_height,
+                    bad_tilt,
                     fall_condition_since_,
                     confirm_ms
                 );
@@ -139,7 +155,8 @@ State_RLBase::State_RLBase(int state_mode, std::string state_string)
         );
     }
 
-    // ---- 恢复完成门控：直立 + 高度达标 + 角速度小（持续 confirm_ms）-> 切到目标状态（如 Fight）----
+    // ---- 恢复完成门控：直立 + 角速度小（持续 confirm_ms）-> 切到目标状态（如 Fight）----
+    // 注：仅用 IMU 倾角 + 角速度判据，不依赖高度（实机无高度源）
     if (cfg["recovery_gate"])
     {
         const auto recovery_cfg = cfg["recovery_gate"];
@@ -147,10 +164,6 @@ State_RLBase::State_RLBase(int state_mode, std::string state_string)
             recovery_cfg["target"] ?
                 recovery_cfg["target"].as<std::string>() :
                 "Fight";
-        const float min_height =
-            recovery_cfg["min_height"] ?
-                recovery_cfg["min_height"].as<float>() :
-                0.55f;
         const float max_tilt =
             recovery_cfg["max_tilt"] ?
                 recovery_cfg["max_tilt"].as<float>() :
@@ -159,14 +172,6 @@ State_RLBase::State_RLBase(int state_mode, std::string state_string)
             recovery_cfg["max_root_ang_vel"] ?
                 recovery_cfg["max_root_ang_vel"].as<float>() :
                 1.0f;
-        const bool height_enabled =
-            recovery_cfg["height_enabled"] ?
-                recovery_cfg["height_enabled"].as<bool>() :
-                true;
-        const bool require_height_source =
-            recovery_cfg["require_height_source"] ?
-                recovery_cfg["require_height_source"].as<bool>() :
-                false;
         const int confirm_ms =
             recovery_cfg["confirm_ms"] ?
                 recovery_cfg["confirm_ms"].as<int>() :
@@ -179,38 +184,17 @@ State_RLBase::State_RLBase(int state_mode, std::string state_string)
             );
         }
 
-        if (height_enabled && !sport_mode_state)
-        {
-            sport_mode_state = std::make_shared<
-                unitree::robot::go2::subscription::SportModeState
-            >();
-        }
-
         const int target_mode = FSMStringMap.right.at(target_name);
         this->registered_checks.emplace_back(
-            [this, min_height, max_tilt, max_root_ang_vel,
-             height_enabled, require_height_source, confirm_ms]() -> bool
+            [this, max_tilt, max_root_ang_vel, confirm_ms]() -> bool
             {
                 const bool upright =
                     !isaaclab::mdp::bad_orientation(env.get(), max_tilt);
                 const bool angularly_stable =
                     env->robot->data.root_ang_vel_b.norm() <
                     max_root_ang_vel;
-
-                bool height_ready = true;
-                if (height_enabled)
-                {
-                    float base_height = 0.0f;
-                    const bool height_valid =
-                        read_base_height(base_height);
-                    height_ready =
-                        height_valid ?
-                            base_height >= min_height :
-                            !require_height_source;
-                }
-
                 return condition_confirmed(
-                    upright && angularly_stable && height_ready,
+                    upright && angularly_stable,
                     recovery_ready_since_,
                     confirm_ms
                 );

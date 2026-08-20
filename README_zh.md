@@ -292,7 +292,9 @@ tmux new -s 1
 |----------------------|---------|-----------------------|------------------------------|
 | Passive（阻尼模式）    | L2 + Up | FixStand              | 进入力矩模式，调整机器人姿态至触地 |
 | FixStand             | R2 + A  | Velocity              | 进入运控模式（速度控制）         |
-| Velocity / FixStand  | R1 + A  | 拳击姿态               | 进入拳击姿态动作                 |
+| Velocity / FixStand  | R1 + A  | 自定义locomotion       | 进入自定义locomotion           |
+| 自定义locomotion      | R1 + Up/left/down/right | 自定义动作  | 进入自定义动作1                |
+
 | 任意状态              | L2 + B  | Passive               | 回到阻尼模式（**急停**）         |
 
 > 键盘辅助（仿真调试）：`a`=Passive，`b`=FixStand，`c`=Velocity，`d`=自定义动作

@@ -12,11 +12,11 @@ default_joint_pos: [-0.645, -0.415, 0.0, 0.151, -0.254, 0.0, 0.00127, -0.209, 0.
 commands:
   base_velocity:
     ranges:
-      lin_vel_x: [-1.0, 1.0]
-      lin_vel_y: [-1.0, 1.0]
-      ang_vel_z: [-2.0, 2.0]
+      lin_vel_x: [-0.5, 1.0]
+      lin_vel_y: [-0.6, 0.6]
+      ang_vel_z: [-1.2, 1.2]
       heading: null
-    max_acceleration: [2.0, 0.5, 1]
+    max_acceleration: [1.0, 1.0, 1.0]
 actions:
   JointPositionAction:
     clip: null
