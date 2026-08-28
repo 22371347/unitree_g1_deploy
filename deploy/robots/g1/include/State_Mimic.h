@@ -22,7 +22,7 @@ public:
     class MotionLoader_;
 
     static std::shared_ptr<MotionLoader_> motion; // for obs computation
-    // 初始偏航对齐（motion_anchor_ori_b 观测使用；State_Backflip 进入/重播时也需设置）
+    // 初始偏航对齐（motion_anchor_ori_b 观测使用；自定义模仿状态进入/重播时也需设置）
     static Eigen::Quaternionf init_quat;
 
 private:

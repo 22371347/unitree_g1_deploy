@@ -218,7 +218,7 @@ State_Mimic::State_Mimic(int state_mode, std::string state_string)
 
     // 从 ONNX metadata 动态解析腰部关节索引，写入该策略的 MotionLoader_
     load_waist_indices_from_onnx(onnx_path.string(), motion_);
-    // 允许 config 显式覆盖腰部关节索引（用于无 metadata 的策略，如 backflip 的 IsaacLab 序 2/5/8）
+    // 允许 config 显式覆盖腰部关节索引（用于无 metadata 的策略，如 IsaacLab 序 2/5/8）
     if (cfg["waist_yaw_idx"])   motion_->waist_yaw_idx   = cfg["waist_yaw_idx"].as<int>();
     if (cfg["waist_roll_idx"])  motion_->waist_roll_idx  = cfg["waist_roll_idx"].as<int>();
     if (cfg["waist_pitch_idx"]) motion_->waist_pitch_idx = cfg["waist_pitch_idx"].as<int>();
