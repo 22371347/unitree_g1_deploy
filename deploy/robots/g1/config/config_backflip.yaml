@@ -1,0 +1,141 @@
+# =====================================================================
+#  Backflip 策略预设 (config_Backflip.yaml)
+#  启动: ./g1_ctrl -n lo -c config_Backflip.yaml
+# =====================================================================
+#  FSM 状态机配置 —— 注册新策略指南
+# =====================================================================
+#  一个待部署的 ONNX 策略要接入本框架，通常需要完成以下 5 步：
+#
+#  (1) 准备策略文件（onnx 模型 + 归一化参数）：
+#      将训练导出的文件放入策略目录：
+#        config/policy/<策略名>/exported/policy.onnx
+#        config/policy/<策略名>/exported/policy.onnx.data
+#
+#  (2) 编写部署配置 config/policy/<策略名>/params/deploy.yaml：
+#        joint_ids_map     : 模型关节顺序 -> 硬件关节顺序 的重映射（长度=模型DOF）
+#        step_dt           : 控制周期（如 0.02 = 50Hz）
+#        stiffness/damping : 关节刚度/阻尼（按【模型顺序】给出，代码会经 joint_ids_map 重映射到硬件）
+#        default_joint_pos : 策略默认关节位置（模型顺序）
+#        actions           : 动作空间配置（scale=动作缩放、offset=默认位置，即 target = action*scale + offset）
+#        observations      : 观测项配置，【各项的书写顺序即 ONNX 模型输入张量的拼接顺序】，务必与训练一致
+#        【注意】关节映射与观测顺序不匹配是部署后动作异常的最常见原因。
+#
+#  (3) 在下方 FSM._ 中注册新状态：给它一个【不与现有状态冲突的 id】，并指定 type：
+#        type: RLBase      -> 速度控制等“无参考轨迹”的策略（State_RLBase）
+#        type: Mimic       -> 动作模仿策略，需要额外提供 motion_file 参考轨迹 npz（State_Mimic）
+#        type: <自定义>     -> 若观测逻辑差异较大，见步骤(5)
+#
+#  (4) 添加该状态自己的配置块
+#
+#  (5) 观测逻辑差异较大时的自定义实现：
+#       在 deploy/robots/g1/include/ 和 deploy/robots/g1/src/ 下编写 State_<名字>.h/.cpp
+#       （继承 FSMState，重写 enter/run/exit 与观测计算），用 REGISTER_FSM(State_<名字>)
+#       注册后，在 main.cpp 中 #include，并把上面 type 指定为 <名字> 即可。
+# =====================================================================
+
+FSM:
+  _: # enabled fsms —— 在此处注册所有启用的状态
+    Passive:
+      id: 1
+    FixStand:
+      id: 2
+    Velocity:
+      id: 3
+      type: RLBase
+    # Backflip 运行策略（type: Backflip：State_Backflip，mimic 观测逻辑 + 停末帧/r重播）
+    Backflip:
+      id: 5
+      type: Backflip
+    # ---- 示例：再新增一个策略状态（以 type: RLBase 为例）----
+    # MyNewPolicy:
+    #   id: 6          # 唯一 id，不要与现有 id 重复
+    #   type: RLBase   # RLBase / Mimic / 自定义 State 名
+    # --------------------------------------------------
+
+  Passive:
+    transitions: 
+      FixStand: LT + up.on_pressed
+    mode: [
+      1,1,1,1,1,1,
+      1,1,1,1,1,1,
+      1,1,1,
+      1,1,1,1,1,1,1,
+      1,1,1,1,1,1,1,
+    ]
+    kd: [
+      3,3,3,3,3,3,
+      3,3,3,3,3,3,
+      3,3,3,
+      3,3,3,3,3,3,3,  
+      3,3,3,3,3,3,3,  
+    ]
+
+  FixStand:
+    transitions: 
+      Passive: LT + B.on_pressed
+      Velocity: RT + A.on_pressed
+      Backflip: RB + A.on_pressed
+    kp: [
+      100,100,100,150,40,40,
+      100,100,100,150,40,40,
+      200,200,200,
+      40,40,40,40,40,40,40,
+      40,40,40,40,40,40,40,
+    ]
+    kd: [
+      2,2,2,4,2,2,
+      2,2,2,4,2,2,
+      5,5,5,
+      10,10,10,10,10,10,10,
+      10,10,10,10,10,10,10,
+    ]
+    ts: [0, 2]
+    qs: [
+      [],
+      [-0.302,0.000442,0.00929,0.672,0.2,-0.368,
+       -0.319,0.00489,0.00796,0.67,0.202,-0.355,
+       0.00124,0.00191,0.00546,
+       0.194,-0.00644,0.00258,0.605,0.00818,0.00293,-0.00955,
+       -0.196,0.00976,-0.00029,0.596,0.00322,-0.00339,-0.00715]
+    ]
+
+  # ---- 示例：RLBase 类型策略（速度控制等，无需参考轨迹）----
+  # transitions:  手柄/按键条件 -> 目标状态，格式：<目标状态名>: <触发条件>
+  # policy_dir:   策略目录（exported/ 与 params/ 的父目录），不含前导 ./ 或 ~
+  Velocity:
+    transitions: 
+      Passive: LT + B.on_pressed
+      FixStand: LT + up.on_pressed
+      Backflip: RB + A.on_pressed
+    policy_dir: config/policy/velocity
+
+  # ---- Backflip 运行策略（type: Backflip：State_Backflip，mimic 观测逻辑 + 停末帧 + r 重播）----
+  # 手柄 RB + A 从 Velocity / FixStand 切入；进入后稳定在末帧，按 r（或再次 RB+down）从头播放；
+  # 播完自动回 end_state（Velocity）
+  Backflip:
+    transitions:
+      Passive: LT + B.on_pressed
+      FixStand: LT + up.on_pressed
+      Velocity: RT + A.on_pressed
+    policy_dir: config/policy/backflip
+    motion_file: config/policy/backflip/motion/kongfan_yufei_v2.npz
+    # 播放模式（快速切换，无需重编译）：
+    #   auto_play: false -> 进入稳定在末帧，按 r / RB+down 重播（默认）
+    #   auto_play: true  -> 进入即播放一次，播完回 end_state
+    auto_play: true
+    # 后空翻全程翻转（倾角远超 57°），禁用 bad_orientation 检测，靠 end_state 播完回 Velocity
+    end_state: Velocity     # 播放完毕自动回 Velocity
+    enable_bad_orientation_check: false
+
+# =====================================================================
+#  健康日志 (g1_health_logger)
+# =====================================================================
+health_log:
+  enabled: false
+  out_dir: logs/g1_health
+  control_hz: 1000.0
+  log_hz: 50.0
+  print_hz: 1.0
+  ring_seconds: 30.0
+  enable_bms: true
+

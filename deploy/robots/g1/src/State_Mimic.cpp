@@ -5,8 +5,8 @@
 #include "g1_health_logger.h"
 #include <onnxruntime_cxx_api.h>
 
-static Eigen::Quaternionf init_quat;
 std::shared_ptr<State_Mimic::MotionLoader_> State_Mimic::motion = nullptr;
+Eigen::Quaternionf State_Mimic::init_quat = Eigen::Quaternionf::Identity();
 
 
 Eigen::Quaternionf robot_quat_w(isaaclab::ManagerBasedRLEnv* env)
@@ -131,7 +131,7 @@ REGISTER_OBSERVATION(motion_anchor_ori_b)
     auto real_quat_w = robot_quat_w(env);
     auto ref_quat_w  = motion_anchor_quat_w(loader);
 
-    auto rot_ = (init_quat * ref_quat_w).conjugate() * real_quat_w;
+    auto rot_ = (State_Mimic::init_quat * ref_quat_w).conjugate() * real_quat_w;
     auto rot = rot_.toRotationMatrix().transpose();
 
     Eigen::Matrix<float, 6, 1> data;
@@ -139,65 +139,10 @@ REGISTER_OBSERVATION(motion_anchor_ori_b)
     return std::vector<float>(data.data(), data.data() + data.size());
 }
     
-   //调试：尝试修改计算方法
-   /*
-REGISTER_OBSERVATION(motion_anchor_ori_b)
-{
-    auto loader = State_Mimic::motion;
-    std::vector<float> out;
-
-    auto real_quat_w = robot_quat_w(env);
-    auto ref_quat_w  = motion_anchor_quat_w(loader);
-
-    // 移除 init_quat，直接计算相对旋转
-    auto q_relative = real_quat_w.conjugate() * ref_quat_w;
-    
-    // 不转置
-    auto rot = q_relative.toRotationMatrix();
-
-    Eigen::Matrix<float, 6, 1> data;
-    data << rot(0, 0), rot(0, 1), rot(1, 0), rot(1, 1), rot(2, 0), rot(2, 1);
-    return std::vector<float>(data.data(), data.data() + data.size());
-}
-    */
 
 // 注册项motion_anchor_pos_b和base_lin_vel
 REGISTER_OBSERVATION(motion_anchor_pos_b)
 {
-    /*auto loader = State_Mimic::motion;
-    if (!loader) {
-        return std::vector<float>{0.0f, 0.0f, 0.0f};
-    }
-    
-    // 1. 获取机器人锚点的世界坐标位置和朝向
-    // 注意：asset->data 中没有 root_pos_w！我们需要从其他地方获取位置。
-    // 解决方案：使用 projected_gravity_b 来推断，或者从 MuJoCo 的 d.xpos 获取。
-    // 在实机部署中，位置需要从状态估计器获取。
-    
-    // 临时方案：使用零位置（假设锚点在世界原点）
-    // 这会导致锚点位置偏差，但可以验证数据流
-    Eigen::Vector3f robot_anchor_pos = Eigen::Vector3f::Zero();  // 需要替换为真实位置
-    
-    // 获取机器人锚点的朝向
-    auto & asset = env->robot;
-    Eigen::Quaternionf robot_anchor_quat = asset->data.root_quat_w;
-    
-    // 2. 获取运动锚点的世界坐标位姿
-    Eigen::Vector3f motion_anchor_pos = loader->root_position();
-    Eigen::Quaternionf motion_anchor_quat = loader->root_quaternion();
-    
-    // 3. 计算相对变换（运动锚点相对于机器人锚点）
-    Eigen::Quaternionf robot_anchor_quat_inv = robot_anchor_quat.conjugate();
-    Eigen::Quaternionf relative_quat = robot_anchor_quat_inv * motion_anchor_quat;
-    Eigen::Vector3f relative_pos = robot_anchor_quat_inv * (motion_anchor_pos - robot_anchor_pos);
-    
-    // 4. 调试输出
-    spdlog::info("[motion_anchor_pos_b] robot_anchor_pos: ({:.4f}, {:.4f}, {:.4f})", 
-                 robot_anchor_pos[0], robot_anchor_pos[1], robot_anchor_pos[2]);
-    spdlog::info("[motion_anchor_pos_b] relative_pos: ({:.4f}, {:.4f}, {:.4f})", 
-                 relative_pos[0], relative_pos[1], relative_pos[2]);
-    
-    return std::vector<float>{relative_pos[0], relative_pos[1], relative_pos[2]};*/
     return std::vector<float>{0.0f, 0.0f, 0.0f};
 }
 
@@ -255,6 +200,14 @@ State_Mimic::State_Mimic(int state_mode, std::string state_string)
     if (cfg["end_state"]) {
         end_state = cfg["end_state"].as<std::string>();
     }
+    // 后空翻等翻转类动作全程倾角会超过 bad_orientation 阈值，需禁用该检测（靠 time_end 结束）
+    bool disable_bad_orientation = false;
+    if (cfg["disable_bad_orientation"]) {
+        disable_bad_orientation = cfg["disable_bad_orientation"].as<bool>();
+    }
+    if (cfg["bad_orientation_limit"]) {
+        bad_orientation_limit_ = cfg["bad_orientation_limit"].as<float>();
+    }
 
     env = std::make_unique<isaaclab::ManagerBasedRLEnv>(
         YAML::LoadFile(policy_dir / "params" / "deploy.yaml"),
@@ -265,6 +218,12 @@ State_Mimic::State_Mimic(int state_mode, std::string state_string)
 
     // 从 ONNX metadata 动态解析腰部关节索引，写入该策略的 MotionLoader_
     load_waist_indices_from_onnx(onnx_path.string(), motion_);
+    // 允许 config 显式覆盖腰部关节索引（用于无 metadata 的策略，如 backflip 的 IsaacLab 序 2/5/8）
+    if (cfg["waist_yaw_idx"])   motion_->waist_yaw_idx   = cfg["waist_yaw_idx"].as<int>();
+    if (cfg["waist_roll_idx"])  motion_->waist_roll_idx  = cfg["waist_roll_idx"].as<int>();
+    if (cfg["waist_pitch_idx"]) motion_->waist_pitch_idx = cfg["waist_pitch_idx"].as<int>();
+    spdlog::info("[waist_cfg] yaw={}, roll={}, pitch={}",
+                 motion_->waist_yaw_idx, motion_->waist_roll_idx, motion_->waist_pitch_idx);
 
     const auto & joy = FSMState::lowstate->joystick;
     this->registered_checks.emplace_back(
@@ -273,12 +232,14 @@ State_Mimic::State_Mimic(int state_mode, std::string state_string)
             FSMStringMap.right.at(end_state)
         )
     );
-    this->registered_checks.emplace_back(
-        std::make_pair(
-            [&]()->bool{ return isaaclab::mdp::bad_orientation(env.get(), 1.0); }, // bad orientation
-            FSMStringMap.right.at("Passive")
-        )
-    );
+    if (!disable_bad_orientation) {
+        this->registered_checks.emplace_back(
+            std::make_pair(
+                [&]()->bool{ return isaaclab::mdp::bad_orientation(env.get(), bad_orientation_limit_); }, // bad orientation
+                FSMStringMap.right.at("Passive")
+            )
+        );
+    }
 }
 
 void State_Mimic::enter()
@@ -309,7 +270,7 @@ void State_Mimic::enter()
         motion->reset(env->robot->data, time_range_[0]);
         auto ref_yaw = isaaclab::yawQuaternion(motion->root_quaternion()).toRotationMatrix();
         auto robot_yaw = isaaclab::yawQuaternion(robot_quat_w(env.get())).toRotationMatrix();
-        init_quat = robot_yaw * ref_yaw.transpose();
+        State_Mimic::init_quat = robot_yaw * ref_yaw.transpose();
         env->reset();
 
         while (policy_thread_running)

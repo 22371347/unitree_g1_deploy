@@ -22,6 +22,8 @@ public:
     class MotionLoader_;
 
     static std::shared_ptr<MotionLoader_> motion; // for obs computation
+    // 初始偏航对齐（motion_anchor_ori_b 观测使用；State_Backflip 进入/重播时也需设置）
+    static Eigen::Quaternionf init_quat;
 
 private:
     std::unique_ptr<isaaclab::ManagerBasedRLEnv> env;
@@ -30,6 +32,7 @@ private:
     std::thread policy_thread;
     bool policy_thread_running = false;
     std::array<float, 2> time_range_;
+    float bad_orientation_limit_ = 1.0f; // bad_orientation 阈值（可配），后空翻等翻转动作可禁用
 };
 
 

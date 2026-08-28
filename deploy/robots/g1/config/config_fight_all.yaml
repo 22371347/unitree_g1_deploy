@@ -7,6 +7,7 @@
 #   - Fight1 (id 6, State_Fight1, WBT 拳击动作): 按键触发一次性播放 -> 播完自动回 Fight
 #   - Fight2 (id 7, State_Fight2, 足锁推动作):  按键触发一次性播放 -> 播完自动回 Fight
 #   - FightRight (id 9, State_Fight1, WBT 右飞踢动作): 按键触发一次性播放 -> 播完自动回 Fight
+#   - Backflip (id 10, State_Backflip, 后空翻动作): 进入稳定末帧，r/RB+A 触发播放 -> 播完自动回 Fight
 #   - Recovery (id 8, RLBase, AMP 倒地恢复): 任一策略摔倒自动切入 -> 恢复站立自动回 Fight
 #
 #  自动切换:
@@ -15,8 +16,8 @@
 #   - Fight1 / Fight2 / FightRight 触发播放并播完后自动回 Fight
 #
 #  手动切换（手柄）:
-#   - FixStand: RB+A=Fight, LB+A=Fight1, RB+B=Fight2, LB+B=FightRight, RT+A=Velocity, LT+B=Passive
-#   - 键盘: a=Passive b=FixStand c=Velocity d=Fight(5) e=Fight1(6) f=Fight2(7) g=FightRight(9)
+#   - FixStand: RB+A=Fight, RB+up=Fight1, RB+left=Fight2, RB+right=FightRight, RB+down=Backflip, RT+A=Velocity, LT+B=Passive
+#   - 键盘: a=Passive b=FixStand c=Velocity d=Fight(5) e=Fight1(6) f=Fight2(7) g=FightRight(9) h=Backflip(10)
 # =====================================================================
 
 FSM:
@@ -43,7 +44,11 @@ FSM:
     #右飞踢
     FightRight:
       id: 9
-      type: Fight1
+      type: Fight2
+    #后空翻
+    Backflip:
+      id: 10
+      type: Backflip
     Recovery:
       id: 8
       type: RLBase
@@ -51,6 +56,7 @@ FSM:
   Passive:
     transitions:
       FixStand: LT + up.on_pressed
+      Recovery: LT + down.on_pressed
     mode: [
       1,1,1,1,1,1,
       1,1,1,1,1,1,
@@ -74,7 +80,8 @@ FSM:
       Fight: RB + A.on_pressed
       Fight1: RB + up.on_pressed
       Fight2: RB + left.on_pressed
-      FightRight: RB + down.on_pressed
+      FightRight: RB + right.on_pressed
+      Backflip: RB + down.on_pressed
     kp: [
       100,100,100,150,40,40,
       100,100,100,150,40,40,
@@ -102,7 +109,8 @@ FSM:
       Fight: RB + A.on_pressed
       Fight1: RB + up.on_pressed
       Fight2: RB + left.on_pressed
-      FightRight: RB + down.on_pressed
+      FightRight: RB + right.on_pressed
+      Backflip: RB + down.on_pressed
     policy_dir: config/policy/velocity
 
   # ---- Fight 拳击（基础策略，速度指令驱动 + 5帧历史）----
@@ -114,7 +122,8 @@ FSM:
       Velocity: RT + A.on_pressed
       Fight1: RB + up.on_pressed
       Fight2: RB + left.on_pressed
-      FightRight: RB + down.on_pressed
+      FightRight: RB + right.on_pressed
+      Backflip: RB + down.on_pressed
     policy_dir: config/policy/fight
     enable_bad_orientation_check: false
     fall_detection:
@@ -129,7 +138,8 @@ FSM:
       FixStand: LT + up.on_pressed
       Velocity: RT + A.on_pressed
       Fight: RB + A.on_pressed
-      FightRight: RB + down.on_pressed
+      FightRight: RB + right.on_pressed
+      Backflip: RB + down.on_pressed
     policy_dir: config/policy/fight1
     motion_file: config/policy/fight1/motion/motion.npz
     # 动作状态用较高倾角阈值（57°）避免飞踢/危险动作误判；超过则进 Recovery
@@ -148,11 +158,12 @@ FSM:
       Fight: RB + A.on_pressed
       Fight1: RB + up.on_pressed
       Fight2: RB + left.on_pressed
+      Backflip: RB + down.on_pressed
     policy_dir: config/policy/fight_right
-    motion_file: config/policy/fight_right/motion/motion_deploy.npz
+    motion_file: config/policy/fight_right/motion/motion_new.npz
     # 动作状态用较高倾角阈值（57°）避免飞踢/危险动作误判；超过则进 Recovery
     enable_bad_orientation_check: true
-    bad_orientation_limit: 1.0
+    bad_orientation_limit: 1.2
     bad_orientation_target: Recovery
     bad_orientation_confirm_ms: 50
     end_state: Fight     # 播放完毕自动回 Fight
@@ -164,10 +175,30 @@ FSM:
       FixStand: LT + up.on_pressed
       Velocity: RT + A.on_pressed
       Fight: RB + A.on_pressed
-      FightRight: RB + down.on_pressed
+      FightRight: RB + right.on_pressed
+      Backflip: RB + down.on_pressed
     policy_dir: config/policy/fight2
     motion_file: config/policy/fight2/motion/motion_deploy.npz
     # 动作状态用较高倾角阈值（57°）避免飞踢/危险动作误判；超过则进 Recovery
+    enable_bad_orientation_check: true
+    bad_orientation_limit: 1.2
+    bad_orientation_target: Recovery
+    bad_orientation_confirm_ms: 50
+    end_state: Fight     # 播放完毕自动回 Fight
+
+  # ---- Backflip 后空翻动作（State_Backflip，进入稳定末帧 + r/RB+A 触发播放，播完自动回 Fight）----
+  Backflip:
+    transitions:
+      Passive: LT + B.on_pressed
+      FixStand: LT + up.on_pressed
+      Velocity: RT + A.on_pressed
+      Fight: RB + A.on_pressed
+      Fight1: RB + up.on_pressed
+      Fight2: RB + left.on_pressed
+      FightRight: RB + right.on_pressed
+    policy_dir: config/policy/backflip
+    motion_file: config/policy/backflip/params/motion.npz
+    # 动作状态用较高倾角阈值（57°）避免危险动作误判；超过则进 Recovery
     enable_bad_orientation_check: true
     bad_orientation_limit: 1.0
     bad_orientation_target: Recovery

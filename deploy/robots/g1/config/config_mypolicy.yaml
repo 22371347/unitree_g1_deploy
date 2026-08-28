@@ -1,0 +1,129 @@
+# =====================================================================
+#  my_policy —— 空白策略模板配置（基于 RLBase / 速度控制类）
+#  启动: ./g1_ctrl -n lo -c config_mypolicy.yaml   （仿真）
+#        ./g1_ctrl -c config_mypolicy.yaml          （实机）
+# =====================================================================
+#  FSM 状态机配置 —— 接入一个策略的 5 步（详见 README_zh.md / doc/ppt）：
+#   (1) 准备策略文件:  config/policy/my_policy/exported/policy.onnx (+ .data)
+#   (2) 编写部署配置:  config/policy/my_policy/params/deploy.yaml（含 TODO 注释）
+#   (3) 在下方 FSM._ 注册状态（已注册 MyPolicy，id=5）
+#   (4) 添加状态配置块（已给出 MyPolicy 块，可改 transitions / policy_dir）
+#   (5) 观测逻辑差异大时自定义 State_<名字>.h/.cpp + main.cpp include
+#
+#  本模板已把「倒地检测恢复（fall_detection / recovery_gate）」设为默认关闭；
+#  需要时取消注释对应配置块即可（见下方 MyPolicy 块内注释）。
+# =====================================================================
+
+FSM:
+  _: # enabled fsms —— 在此处注册所有启用的状态
+    Passive:
+      id: 1
+    FixStand:
+      id: 2
+    Velocity:
+      id: 3
+      type: RLBase
+    # 你的策略状态（空白模板，已注册）
+    MyPolicy:
+      id: 5
+      type: RLBase       # RLBase=速度类 / Mimic=动作模仿 / 自定义State名
+    # ---- 示例：再新增一个策略状态 ----
+    # MyNewPolicy:
+    #   id: 6          # 唯一 id，不要与现有 id 重复
+    #   type: RLBase   # RLBase / Mimic / 自定义 State 名
+    # --------------------------------------------------
+
+  Passive:
+    transitions: 
+      FixStand: LT + up.on_pressed
+    mode: [
+      1,1,1,1,1,1,
+      1,1,1,1,1,1,
+      1,1,1,
+      1,1,1,1,1,1,1,
+      1,1,1,1,1,1,1,
+    ]
+    kd: [
+      3,3,3,3,3,3,
+      3,3,3,3,3,3,
+      3,3,3,
+      3,3,3,3,3,3,3,  
+      3,3,3,3,3,3,3,  
+    ]
+
+  FixStand:
+    transitions: 
+      Passive: LT + B.on_pressed
+      Velocity: RT + A.on_pressed
+      MyPolicy: RB + A.on_pressed
+    kp: [
+      100,100,100,150,40,40,
+      100,100,100,150,40,40,
+      200,200,200,
+      40,40,40,40,40,40,40,
+      40,40,40,40,40,40,40,
+    ]
+    kd: [
+      2,2,2,4,2,2,
+      2,2,2,4,2,2,
+      5,5,5,
+      10,10,10,10,10,10,10,
+      10,10,10,10,10,10,10,
+    ]
+    ts: [0, 2]
+    qs: [
+      [],
+      [ -0.1, 0,0,0.3,-0.2,0,
+        -0.1, 0,0,0.3,-0.2,0,
+        0,0,0,
+        0.35, 0.18,0,0.87,0,0,0,
+        0.35,-0.18,0,0.87,0,0,0
+      ]
+    ]
+
+  # ---- 基础速度状态（RLBase，安全站立的底）----
+  Velocity:
+    transitions: 
+      Passive: LT + B.on_pressed
+      FixStand: LT + up.on_pressed
+      MyPolicy: RB + A.on_pressed
+    policy_dir: config/policy/velocity
+
+  # ---- 你的策略状态（空白模板）----
+  # 手柄 RB + A 从 Velocity / FixStand 切入
+  MyPolicy:
+    transitions:
+      Passive: LT + B.on_pressed
+      FixStand: LT + up.on_pressed
+      Velocity: RT + A.on_pressed
+    policy_dir: config/policy/my_policy
+
+    # ---- 动作模仿（Mimic）类型才需要以下配置（并把 FSM._ 里 MyPolicy 的 type 改为 Mimic）----
+    # motion_file: config/policy/my_policy/motion/xxx.npz
+    # time_start: 0.0
+    # time_end: 5.34
+    # end_state: Velocity
+
+    # ---- 倒地检测恢复（默认不开启）----
+    # 需要摔倒自动切 Recovery、恢复完成自动回本状态时，取消注释并调整参数：
+    # fall_detection:
+    #   target: Recovery
+    #   max_tilt: 0.872665      # 50 度
+    #   confirm_ms: 50
+    # recovery_gate:
+    #   target: MyPolicy
+    #   max_tilt: 0.30
+    #   max_root_ang_vel: 1.0
+    #   confirm_ms: 500
+
+# =====================================================================
+#  健康日志 (g1_health_logger，可选)
+# =====================================================================
+health_log:
+  enabled: false
+  out_dir: logs/g1_health
+  control_hz: 1000.0
+  log_hz: 50.0
+  print_hz: 1.0
+  ring_seconds: 30.0
+  enable_bms: true

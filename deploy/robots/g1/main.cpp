@@ -6,6 +6,7 @@
 #include "State_Wbc.h"
 #include "State_Fight1.h"
 #include "State_Fight2.h"
+#include "State_Backflip.h"
 #include "g1_health_logger.h"
 
 std::unique_ptr<LowCmd_t> FSMState::lowcmd = nullptr;

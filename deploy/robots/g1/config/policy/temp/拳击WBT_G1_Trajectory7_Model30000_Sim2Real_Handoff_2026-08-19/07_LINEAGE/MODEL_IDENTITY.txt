@@ -1,0 +1,24 @@
+Model:
+  model_30000.pt
+
+Training run:
+  2026-08-18_19-54-59_trajectory7_punch_scratch_30001
+
+Task:
+  Tracking-Flat-G1-Wo-State-Estimation-v0
+
+Policy:
+  154D observation
+  29D action
+
+Motion:
+  m_shortmove12_frames280_350_trajectory7_stance_v1
+  50 Hz
+  159 frames
+
+Default/reference stance:
+  trajectory7 new stance
+
+Important:
+  This is the new-stance scratch baseline.
+  This is NOT the historical model_46500 Robust-v0 checkpoint.

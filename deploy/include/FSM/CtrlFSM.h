@@ -46,7 +46,7 @@ public:
             add(state_instance);
         }
 
-        spdlog::info("Keyboard->joystick (sim): ↑/↓/←/→=move(ly/lx), q/e=turn(rx), z=stop(toggle); a/b/c/d/e/f/g=FSM switch");
+        spdlog::info("Keyboard->joystick (sim): ↑/↓/←/→=move(ly/lx), q/e=turn(rx), z=stop(toggle); a/b/c/d/e/f/g/h=FSM switch");
     }
 
     void start() 
@@ -120,6 +120,7 @@ private:
             else if (key == "e") nextStateMode = 6; // Fight1
             else if (key == "f") nextStateMode = 7; // Fight2
             else if (key == "g") nextStateMode = 9; // FightRight
+            else if (key == "h") nextStateMode = 10; // Backflip
         }
         
 
@@ -144,12 +145,12 @@ private:
         // 键盘模拟手柄摇杆（toggle 式）：按一次置位，再按一次归零
         if (FSMState::keyboard->on_pressed) {
             const std::string key = FSMState::keyboard->key();
-            if      (key == "up")    kbd_ly_ = (kbd_ly_ > 0.0f) ? 0.0f : 1.0f;   // 前进
-            else if (key == "down")  kbd_ly_ = (kbd_ly_ < 0.0f) ? 0.0f : -1.0f;  // 后退
-            else if (key == "right")  kbd_lx_ = (kbd_lx_ > 0.0f) ? 0.0f : 1.0f;   // 右移
-            else if (key == "left") kbd_lx_ = (kbd_lx_ < 0.0f) ? 0.0f : -1.0f;  // 左移
-            else if (key == "e")     kbd_rx_ = (kbd_rx_ > 0.0f) ? 0.0f : 1.0f;   // 右转
-            else if (key == "q")     kbd_rx_ = (kbd_rx_ < 0.0f) ? 0.0f : -1.0f;  // 左转
+            if      (key == "up")    kbd_ly_ = (kbd_ly_ > 0.0f) ? 0.0f : 5.0f;   // 前进
+            else if (key == "down")  kbd_ly_ = (kbd_ly_ < 0.0f) ? 0.0f : -5.0f;  // 后退
+            else if (key == "right")  kbd_lx_ = (kbd_lx_ > 0.0f) ? 0.0f : 5.0f;   // 右移
+            else if (key == "left") kbd_lx_ = (kbd_lx_ < 0.0f) ? 0.0f : -5.0f;  // 左移
+            else if (key == "e")     kbd_rx_ = (kbd_rx_ > 0.0f) ? 0.0f : 5.0f;   // 右转
+            else if (key == "q")     kbd_rx_ = (kbd_rx_ < 0.0f) ? 0.0f : -5.0f;  // 左转
             else if (key == "z")     { kbd_ly_ = kbd_lx_ = kbd_rx_ = 0.0f; }     // 急停
         }
         // 写入 joystick 摇杆（velocity_commands 观测读取；DDS 每帧清零，故在此重注入）

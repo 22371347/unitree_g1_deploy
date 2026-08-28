@@ -182,6 +182,55 @@ python scripts/play.py Unitree-G1-Tracking-No-State-Estimation --motion_file=src
 > `config.yaml` 内已内置完整的注册引导注释与可直接照抄的示例
 > （`Velocity` = RLBase 示例，`Fight1` / `AMP` = 策略状态示例）。
 
+#### 4.1.1 一次性动作策略部署（后空翻 backflip 示例，State_Mimic 播放式）⭐
+
+适用场景：**后空翻 / 拳击 / 踢腿** 等「一次性动作」策略。
+
+**两种部署方式**：
+- `type: Mimic`（`State_Mimic`，推荐）：仿照 `beyondmimic_nostate`，用 `observation_manager` + `env->step()` 自动构建观测，播放到 `time_end` 自动回 `end_state`。
+- 自定义 State（`State_Backflip` / `State_Fight1` / `State_Fight2`）：手动 `build_obs_map`，支持「进入停末帧 + 按 `r` 重播」模式。
+
+**行为模式（State_Mimic 播放式）**：
+- 进入状态 → 从头播放动作 → 播放到 `time_end` 自动切回 `end_state`（如 `Velocity`）
+- 若需「停末帧 + 重播」，改用自定义 State（见 `State_Backflip`）
+
+**实现要点**（backflip 当前用 `type: Mimic`，`config_backflip.yaml`）：
+```yaml
+FSM:
+  _:
+    Backflip:
+      id: 5
+      type: Mimic          # 用 State_Mimic + observation_manager + env->step()
+  Backflip:
+    transitions: { Passive: LT + B.on_pressed, FixStand: LT + up.on_pressed, Velocity: RT + A.on_pressed }
+    policy_dir: config/policy/backflip
+    motion_file: config/policy/backflip/params/motion.npz
+    # backflip motion 为 IsaacLab 关节序，腰部在 2/5/8（State_Mimic 默认 12/13/14，需显式覆盖）
+    waist_yaw_idx: 2
+    waist_roll_idx: 5
+    waist_pitch_idx: 8
+    # 后空翻全程翻转（倾角远超 57°），禁用 bad_orientation，靠 time_end 结束回 Velocity
+    disable_bad_orientation: true
+    end_state: Velocity
+```
+**deploy.yaml 要点**（`config/policy/backflip/params/deploy.yaml`）：
+1. 观测用 6 项（`motion_command` 58 + `motion_anchor_ori_b` 6 + `base_ang_vel` 3 + `joint_pos_rel` 29 + `joint_vel_rel` 29 + `last_action` 29 = 154），由 `State_Mimic` 的 `observation_manager` 自动生成——**与手动 `build_obs_map` 相比能排除观测拼序/漏项问题**。
+2. `stiffness/damping` 按 **IsaacLab 对称序**（`[40.2,40.2,40.2,99.1,99.1,28.5,...]`），避免左右腿刚度不平衡导致失衡。
+3. `actions.joint_ids: [0,6,12,...]` 显式指定模型→硬件映射。
+
+> ⚠️ **重要：motion 的 joint_vel 必须平滑！**
+> 后空翻等快速动作的 `csv` 通常不含关节速度，差分得到的 `joint_vel` 含**高频噪声**。AMP 系策略
+> （无世界模型）对 `motion_command` 里的 joint_vel 噪声敏感 → 起跳/翻转阶段机器人跟不上 → 输出
+> 大动作 → 正反馈**指数爆炸**（act 可到 1e21+，实机表现为剧烈抽搐）。
+> 解决：对差分后的 `joint_vel` 做**滑动平均（窗口 5）**再写回 motion.npz（见 `scripts` 或
+> `deploy/robots/g1/config/policy/backflip/params/motion_orig_vel.npz` 备份对比）。
+
+> 📌 关节序速查：**backflip 为 IsaacLab 序**（`joint_ids_map = [0,6,12,...]`，腰 2/5/8）；AMP_mjlab 系
+> （`fight2` / `amp_recovery`）为 **qpos 序**（恒等映射 `[0..28]`，腰 12/13/14）；WBT 系
+> （`fight1` / `fight_right` / `beyondmimic_nostate`）为 **IsaacLab 序**。
+> 用错关节序会导致肢体错乱——判断依据：csv 中 knee 位置（qpos 在 col3/9）与 stiffness 分组
+> （腿6+腿6+腰3+臂7+臂7）；且 **backflip 的 onnx 为单输出（AMP），无 time_step**。
+
 #### 多配置并行测试（配置预设）
 
 在 `deploy/robots/g1/config/` 下保存为 `config_<策略名>.yaml`（如 `config_fight.yaml`、`config_AMP.yaml`），
@@ -309,4 +358,13 @@ tmux new -s 1
 - [rsl_rl](https://github.com/leggedrobotics/rsl_rl.git): 强化学习算法实现。
 - [mujoco_warp](https://github.com/google-deepmind/mujoco_warp.git): 提供 GPU 加速渲染与仿真接口。
 - [mujoco](https://github.com/google-deepmind/mujoco.git): 提供强大仿真功能。
+
+终端1：
+cd ~/g1_ws/unitree_rl_mjlab/simulate/build
+./unitree_mujoco 
+终端2：
+cd ~/g1_ws/unitree_rl_mjlab/deploy/robots/g1/build
+./g1_ctrl -n lo
+
+
 
