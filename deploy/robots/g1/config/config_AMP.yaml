@@ -92,12 +92,13 @@ FSM:
     ts: [0, 2]
     qs: [
       [],
-      [ -0.1, 0,0,0.3,-0.2,0,
-        -0.1, 0,0,0.3,-0.2,0,
-        0,0,0,
-        0.35, 0.18,0,0.87,0,0,0,
-        0.35,-0.18,0,0.87,0,0,0
-      ]
+      [-0.312,0,0,0.669,-0.363,0,-0.312,0,0,0.669,-0.363,0,0,0,0,0.2,0.2,0,0.6,0,0,0,0.2,-0.2,0,0.6,0,0,0]
+      #[ -0.1, 0,0,0.3,-0.2,0,
+      #  -0.1, 0,0,0.3,-0.2,0,
+      #  0,0,0,
+      #  0.35, 0.18,0,0.87,0,0,0,
+      #  0.35,-0.18,0,0.87,0,0,0
+      #]
     ]
 
   # ---- 示例：RLBase 类型策略（速度控制等，无需参考轨迹）----
@@ -109,7 +110,7 @@ FSM:
       FixStand: LT + up.on_pressed
       AMP: RB + X.on_pressed
     policy_dir: config/policy/velocity
-
+    enable_bad_orientation_check: false
   # ---- AMP 运行策略（type: RLBase，速度指令驱动 + 4帧历史）----
   # 手柄 RB + X 从 Velocity / FixStand 切入，速度用左摇杆 + 右摇杆 yaw 控制
   AMP:
@@ -118,6 +119,7 @@ FSM:
       FixStand: LT + up.on_pressed
       Velocity: RT + A.on_pressed
     policy_dir: config/policy/AMP
+    enable_bad_orientation_check: false
 
 # =====================================================================
 #  健康日志 (g1_health_logger)

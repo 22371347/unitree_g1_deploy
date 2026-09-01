@@ -86,7 +86,7 @@ State_RLBase::State_RLBase(int state_mode, std::string state_string)
     env->alg = std::make_unique<isaaclab::OrtRunner>(policy_dir / "exported" / "policy.onnx");
 
     // ---- 姿态保护（可配置，默认开启）：倾角超限 -> Passive ----
-    bool enable_bad_orientation_check = true;
+    bool enable_bad_orientation_check = false;
     if (cfg["enable_bad_orientation_check"])
     {
         enable_bad_orientation_check =
