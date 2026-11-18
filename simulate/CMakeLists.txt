@@ -29,10 +29,14 @@ file(GLOB SIM_SRC
   mujoco/simulate/platform_*.cc
   mujoco/simulate/simulate.cc
   src/lodepng/lodepng.cpp
+
+  # PHP depth camera publisher (raycast -> depth_raw_shm)
+  src/depth_camera.cc
 )
 
 link_libraries(
   pthread
+  rt
   mujoco
   glfw
   yaml-cpp

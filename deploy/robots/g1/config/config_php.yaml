@@ -1,0 +1,132 @@
+# =====================================================================
+#  PHP 感知跑酷策略预设 (config_php.yaml)
+#  启动(仿真): ./g1_ctrl -n lo -c config_php.yaml
+#  启动(实机): ./g1_ctrl -c config_php.yaml
+# =====================================================================
+#  本预设 = 公共状态(Passive / FixStand / Velocity) + PHP 感知跑酷(Php)
+#  与默认 config.yaml 的唯一区别：多了 Php 状态及其切换条件。
+#
+#  PHP 策略相关资产：
+#   (1) 双 ONNX（学生 + 深度骨干）：
+#         config/policy/php/exported/student.onnx
+#         config/policy/php/exported/depth_backbone.onnx
+#   (2) 部署参数（obs[140] + time_step，50Hz）：
+#         config/policy/php/params/deploy.yaml
+#   (3) 深度来源：/dev/shm/depth_raw_shm
+#         由 unitree_mujoco 以 10Hz 发布 106x60 原始平面深度（D435i：HFOV 89.5°, near 0.3 / far 3.0 m）
+#         实机侧需换成真实 D435i 深度源（同一 shm 名、同一布局即可）
+#
+#  按键（Php 用 id 4 —— 设计时预留给自定义策略的序号，键盘 d）：
+#   键盘  a=Passive   b=FixStand   c=Velocity   d=Php
+#         进入 Php 后（与 Velocity 同一套摇杆/toggle 设计）：
+#           ↑=前进（再按一下归零=站立）  ↓=后退  ←/→=左右横移  q/e=左右转向  z=停止
+#           ↑+← / ↑+→ = 左前45° / 右前45°
+#   手柄  LT+up -> FixStand     RT+A -> Velocity     RB+Y -> Php     LT+B -> Passive(急停)
+#         实机：直接推左摇杆(前后/左右)、右摇杆(转向)，回中即站立
+# =====================================================================
+
+# ---------------------------------------------------------------------
+#  键盘字母 -> 状态名（可选；不写则用 CtrlFSM 内置默认映射）
+#  这里显式声明，避免“键位与状态 id 不同步”。
+# ---------------------------------------------------------------------
+keyboard:
+  a: Passive
+  b: FixStand
+  c: Velocity
+  d: Php
+
+FSM:
+  _: # enabled fsms —— 在此处注册所有启用的状态
+    Passive:
+      id: 1
+    FixStand:
+      id: 2
+    Velocity:
+      id: 3
+      type: RLBase
+    # PHP 感知跑酷（学生 + 深度骨干双 ONNX，深度走 shm）
+    # id 4 = 设计时预留给自定义策略的序号，对应键盘 d
+    Php:
+      id: 4
+      type: Php
+
+  Passive:
+    transitions:
+      FixStand: LT + up.on_pressed
+    mode: [
+      1,1,1,1,1,1,
+      1,1,1,1,1,1,
+      1,1,1,
+      1,1,1,1,1,1,1,
+      1,1,1,1,1,1,1,
+    ]
+    kd: [
+      3,3,3,3,3,3,
+      3,3,3,3,3,3,
+      3,3,3,
+      3,3,3,3,3,3,3,
+      3,3,3,3,3,3,3,
+    ]
+
+  FixStand:
+    transitions:
+      Passive: LT + B.on_pressed
+      Velocity: RT + A.on_pressed
+      Php: RB + Y.on_pressed
+    kp: [
+      100,100,100,150,40,40,
+      100,100,100,150,40,40,
+      200,200,200,
+      40,40,40,40,40,40,40,
+      40,40,40,40,40,40,40,
+    ]
+    kd: [
+      2,2,2,4,2,2,
+      2,2,2,4,2,2,
+      5,5,5,
+      10,10,10,10,10,10,10,
+      10,10,10,10,10,10,10,
+    ]
+    ts: [0, 2]
+    qs: [
+      [],
+      [ -0.1, 0,0,0.3,-0.2,0,
+        -0.1, 0,0,0.3,-0.2,0,
+        0,0,0,
+        0.35, 0.18,0,0.87,0,0,0,
+        0.35,-0.18,0,0.87,0,0,0
+      ]
+    ]
+
+  # ---- 公共速度控制策略 ----
+  Velocity:
+    transitions:
+      Passive: LT + B.on_pressed
+      FixStand: LT + up.on_pressed
+      Php: RB + Y.on_pressed
+    policy_dir: config/policy/velocity
+
+  # ---- PHP 感知跑酷策略（type: Php -> State_Php）----
+  # 键盘 d 或 手柄 RB + Y 切入；进入时指令为 0（站立），
+  # 之后用方向键 / 摇杆切换方向（与 Velocity 同一套 toggle 设计，再按一下归零）
+  Php:
+    transitions:
+      Passive: LT + B.on_pressed
+      FixStand: LT + up.on_pressed
+      Velocity: RT + A.on_pressed
+    policy_dir: config/policy/php
+    debug_log: false       # true -> 每秒打印 cmd / depth / knee / |a|max / angvel
+    disable_depth: false   # true -> 喂零深度 latent（A/B 测试用）
+    gravity_mode: torso    # torso(训练一致) | pelvis(与 Velocity 一致)
+
+# =====================================================================
+#  健康日志 (g1_health_logger)
+# =====================================================================
+health_log:
+  enabled: false
+  out_dir: logs/g1_health
+  control_hz: 1000.0
+  log_hz: 50.0
+  print_hz: 1.0
+  ring_seconds: 30.0
+  enable_bms: true

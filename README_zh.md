@@ -169,7 +169,7 @@ python scripts/play.py Unitree-G1-Tracking-No-State-Estimation --motion_file=src
      （`[帧0: 全部项, 帧1: 全部项, ...]`，mjlab `history_ordering="time"`）；`false` = 按项组织
      （`[项0: 全部帧, 项1: 全部帧, ...]`，IsaacLab `concatenate_terms`）。
      布局错误会让策略收到错乱观测却照常推理（无报错）→ 抽搐 / 无法响应。
-3. **注册 FSM 状态**：在 `deploy/robots/g1/config/config.yaml` 的 `FSM._` 中新增状态，指定**唯一 id** 与 `type`：
+3. **注册 FSM 状态**：在 `deploy/robots/g1/config/config_<策略名>.yaml`（从 `config.yaml` 复制而来，见下方“多配置并行测试”）的 `FSM._` 中新增状态，指定**唯一 id** 与 `type`：
    - `type: RLBase` —— 无参考轨迹的策略（如速度控制，对应 `State_RLBase`）
    - `type: Mimic` —— 动作模仿策略，需额外提供 `motion_file`（对应 `State_Mimic`）
    - `type: <自定义>` —— 观测逻辑差异较大时，见第 5 步
@@ -240,12 +240,28 @@ FSM:
 cd deploy/robots/g1/build
 ./g1_ctrl -n lo -c config_fight1.yaml    # 仿真，fight1（WBT）策略
 ./g1_ctrl -n lo -c config_AMP.yaml       # 仿真，AMP 策略
+./g1_ctrl -n lo -c config_php.yaml       # 仿真，PHP 感知跑酷策略
 ./g1_ctrl -c config_fight1.yaml          # 实机（默认 DDS 配置）
 ```
 
 - 未指定 `--config` 时默认加载 `config.yaml`。
-- 各预设共享公共状态（`Passive` / `FixStand` / `Velocity`），仅在启用的策略状态（`Fight1` / `AMP` / …）上不同，
+- 各预设共享公共状态（`Passive` / `FixStand` / `Velocity`），仅在启用的策略状态（`Fight1` / `AMP` / `Php` / …）上不同，
   编辑时请保持公共部分一致。
+
+**键盘键位与状态 id 对齐**：各预设可在**文件顶层**用 `keyboard:` 段显式声明「键盘字母 → 状态名」，
+`CtrlFSM` 会按 `FSM._` 里该状态的 `id` 自动解析，避免出现“按了键但与 id 对不上”的问题：
+
+```yaml
+keyboard:
+  a: Passive
+  b: FixStand
+  c: Velocity
+  i: Php
+```
+
+- 写了 `keyboard:` 段 → **完全以配置为准**（未注册的状态会告警并被忽略）；
+- 不写 → 使用内置默认映射 `a=1 b=2 c=3 d=5 e=6 f=7 g=9 h=10 i=11`。
+- 方向键（`↑ ↓ ← →`）始终是“模拟摇杆 / 策略方向指令”，与上面的字母键互不干扰。
 
 #### 4.2 Sim2Real：MuJoCo 仿真验证
 
@@ -286,10 +302,52 @@ cd deploy/robots/g1/build
 ```
 
 进入后可通过键盘 `a` `b` `c` `d` 切换四个状态进行观测
-（`a`=Passive，`b`=FixStand，`c`=Velocity，`d`=Mimic_Dance1_subject2）。
+（`a`=Passive，`b`=FixStand，`c`=Velocity，`d`=当前预设里的自定义策略）。
+
+> [!TIP]
+> 上面的 `./g1_ctrl -n lo` 加载的是默认 `config.yaml`。若要跑某个预设（如 PHP），
+> 加上 `-c`：`./g1_ctrl -n lo -c config_php.yaml`。
 
 > [!NOTE]
 > `-n` / `--network` 指定 DDS 网络接口。仿真时用 `lo`（本机回环）。
+
+#### 4.2.1 PHP 感知跑酷策略（State_Php，预设 `config_php.yaml`，键盘 `d` 进入）
+
+- **启动**：本策略在**独立预设** `config_php.yaml` 中，默认 `config.yaml` 不含 `Php` 状态：
+  ```bash
+  cd deploy/robots/g1/build
+  ./g1_ctrl -n lo -c config_php.yaml
+  ```
+- **状态号**：`Php` 使用 `id: 4` —— 设计时预留给自定义策略的序号，对应键盘 `d`。
+- **进入**：在 `g1_ctrl` 终端按键盘 `d`（或手柄 `RB + Y`）进入 PHP；**进入时默认 0 指令（站立）**。
+- **切出**：`LT + B` 回 Passive（急停），`LT + up` 回 FixStand，`RT + A` 回 Velocity。
+- **速度指令**：与 `Velocity` 等策略**共用同一套摇杆 / 键盘 toggle 设计**——状态只读摇杆量，
+  方向键只是把虚拟摇杆置位（按一次置位，再按一次归零 → 站立）：
+
+  | 按键 | 虚拟摇杆 | 行为 | `command` |
+  |---|---|---|---|
+  | ↑ | `ly=+5` | 前进（**再按一下归零 = 站立**） | 1 |
+  | ↓ | `ly=-5` | 后退（再按一下归零） | 11 |
+  | ← / → | `lx=∓5` | 左 / 右横移 90°（再按一下归零） | 3 / 5 |
+  | q / e | `rx=∓5` | 左 / 右原地转（再按一下归零） | 3 / 5 |
+  | ↑ + ← / ↑ + → | `ly=+5, lx=∓5` | 左前 / 右前 45° | 2 / 4 |
+  | `z` | 全部归零 | 停止 / 站立 | 0 |
+
+  实机直接推左摇杆（前后 / 左右）、右摇杆（转向），回中即站立。
+
+- **观测构成**：`[ actions(29), base_ang_vel(3), dof_pos(29), dof_vel(29), projected_gravity(3) ]`（共 93）
+  `+ velocity_command(15) + depth_latent(32) = 140`；`time_step` 恒为 0。
+  深度来自 `/dev/shm/depth_raw_shm`：`unitree_mujoco` 以 10Hz 发布 `106×60` 原始平面深度
+  （torso_link 前向、D435i 参数：HFOV 89.5°，near 0.3 / far 3.0 m）。
+- **实物越障软垫**：`scene_g1.xml` 中 `pad_left` / `pad_right`（2 块 0.5×0.5m 并排 = 左右 1.0m × 前后 0.5m × 高 0.3m），
+  中心 `x=1.6m`（机器人正前方）。
+- **深度相机探测范围可视化**：`torso_link` 下的 `depth_fov` 子体（橙色半透明视锥，near0.3~far3.0）。
+  它位于 geom **group 4**，而深度射线只取 **group 0/1**，因此不会被当成障碍物（否则会在相机处“糊屏”）。
+  在 MuJoCo 查看器中可按需切换显示 geom 分组。
+
+> [!NOTE]
+> 深度共享内存 `depth_raw_shm` 由 `unitree_mujoco` 创建；若先启动 `g1_ctrl` 再启动仿真，进入 PHP 时会自动重连该 shm。
+
 
 #### 4.3 实机部署
 
@@ -346,7 +404,7 @@ tmux new -s 1
 
 | 任意状态              | L2 + B  | Passive               | 回到阻尼模式（**急停**）         |
 
-> 键盘辅助（仿真调试）：`a`=Passive，`b`=FixStand，`c`=Velocity，`d`=自定义动作
+> 键盘辅助（仿真调试）：`a`=Passive，`b`=FixStand，`c`=Velocity，`d`=自定义策略（PHP 预设即为 PHP，需 `-c config_php.yaml` 启动）
 
 
 ## 🎉  致谢

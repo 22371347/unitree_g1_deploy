@@ -34,6 +34,7 @@
 #include "array_safety.h"
 #include "unitree_sdk2_bridge.h"
 #include "param.h"
+#include "depth_camera.h"
 
 #define MUJOCO_PLUGIN_DIR "mujoco_plugin"
 #define NUM_MOTOR_IDL_GO 20
@@ -518,6 +519,8 @@ namespace
             if (stepped)
             {
               sim.AddToHistory();
+              // Publish depth from the physics thread (owns mjData here; rate-limited internally).
+              depth_camera::MaybeUpdate(m, d);
             }
           }
 
@@ -554,6 +557,9 @@ void PhysicsThread(mj::Simulate *sim, const char *filename)
       free(ctrlnoise);
       ctrlnoise = static_cast<mjtNum *>(malloc(sizeof(mjtNum) * m->nu));
       mju_zero(ctrlnoise, m->nu);
+
+      // Set up the depth camera (shared memory + intrinsics), once per model load.
+      depth_camera::Init(m);
     }
     else
     {
@@ -564,6 +570,7 @@ void PhysicsThread(mj::Simulate *sim, const char *filename)
   PhysicsLoop(*sim);
 
   // delete everything we allocated
+  depth_camera::Shutdown();
   free(ctrlnoise);
   mj_deleteData(d);
   mj_deleteModel(m);

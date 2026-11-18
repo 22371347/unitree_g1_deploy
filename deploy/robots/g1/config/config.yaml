@@ -1,37 +1,39 @@
 # =====================================================================
-#  AMP 策略预设 (config_AMP.yaml)
-#  启动: ./g1_ctrl -n lo -c config_AMP.yaml
+#  PHP 感知跑酷策略预设 (config_php.yaml)
+#  启动(仿真): ./g1_ctrl -n lo -c config_php.yaml
+#  启动(实机): ./g1_ctrl -c config_php.yaml
 # =====================================================================
-#  FSM 状态机配置 —— 注册新策略指南
+#  本预设 = 公共状态(Passive / FixStand / Velocity) + PHP 感知跑酷(Php)
+#  与默认 config.yaml 的唯一区别：多了 Php 状态及其切换条件。
+#
+#  PHP 策略相关资产：
+#   (1) 双 ONNX（学生 + 深度骨干）：
+#         config/policy/php/exported/student.onnx
+#         config/policy/php/exported/depth_backbone.onnx
+#   (2) 部署参数（obs[140] + time_step，50Hz）：
+#         config/policy/php/params/deploy.yaml
+#   (3) 深度来源：/dev/shm/depth_raw_shm
+#         由 unitree_mujoco 以 10Hz 发布 106x60 原始平面深度（D435i：HFOV 89.5°, near 0.3 / far 3.0 m）
+#         实机侧需换成真实 D435i 深度源（同一 shm 名、同一布局即可）
+#
+#  按键（Php 用 id 4 —— 设计时预留给自定义策略的序号，键盘 d）：
+#   键盘  a=Passive   b=FixStand   c=Velocity   d=Php
+#         进入 Php 后（与 Velocity 同一套摇杆/toggle 设计）：
+#           ↑=前进（再按一下归零=站立）  ↓=后退  ←/→=左右横移  q/e=左右转向  z=停止
+#           ↑+← / ↑+→ = 左前45° / 右前45°
+#   手柄  LT+up -> FixStand     RT+A -> Velocity     RB+Y -> Php     LT+B -> Passive(急停)
+#         实机：直接推左摇杆(前后/左右)、右摇杆(转向)，回中即站立
 # =====================================================================
-#  一个待部署的 ONNX 策略要接入本框架，通常需要完成以下 5 步：
-#
-#  (1) 准备策略文件（onnx 模型 + 归一化参数）：
-#      将训练导出的文件放入策略目录：
-#        config/policy/<策略名>/exported/policy.onnx
-#        config/policy/<策略名>/exported/policy.onnx.data
-#
-#  (2) 编写部署配置 config/policy/<策略名>/params/deploy.yaml：
-#        joint_ids_map     : 模型关节顺序 -> 硬件关节顺序 的重映射（长度=模型DOF）
-#        step_dt           : 控制周期（如 0.02 = 50Hz）
-#        stiffness/damping : 关节刚度/阻尼（按【模型顺序】给出，代码会经 joint_ids_map 重映射到硬件）
-#        default_joint_pos : 策略默认关节位置（模型顺序）
-#        actions           : 动作空间配置（scale=动作缩放、offset=默认位置，即 target = action*scale + offset）
-#        observations      : 观测项配置，【各项的书写顺序即 ONNX 模型输入张量的拼接顺序】，务必与训练一致
-#        【注意】关节映射与观测顺序不匹配是部署后动作异常的最常见原因。
-#
-#  (3) 在下方 FSM._ 中注册新状态：给它一个【不与现有状态冲突的 id】，并指定 type：
-#        type: RLBase      -> 速度控制等“无参考轨迹”的策略（State_RLBase）
-#        type: Mimic       -> 动作模仿策略，需要额外提供 motion_file 参考轨迹 npz（State_Mimic）
-#        type: <自定义>     -> 若观测逻辑差异较大，见步骤(5)
-#
-#  (4) 添加该状态自己的配置块（transitions 手柄切换、policy_dir 等），参考下方 Velocity / AMP 示例。
-#
-#  (5) 观测逻辑差异较大时的自定义实现：
-#       在 deploy/robots/g1/include/ 和 deploy/robots/g1/src/ 下编写 State_<名字>.h/.cpp
-#       （继承 FSMState，重写 enter/run/exit 与观测计算），用 REGISTER_FSM(State_<名字>)
-#       注册后，在 main.cpp 中 #include，并把上面 type 指定为 <名字> 即可。
-# =====================================================================
+
+# ---------------------------------------------------------------------
+#  键盘字母 -> 状态名（可选；不写则用 CtrlFSM 内置默认映射）
+#  这里显式声明，避免“键位与状态 id 不同步”。
+# ---------------------------------------------------------------------
+keyboard:
+  a: Passive
+  b: FixStand
+  c: Velocity
+  d: Php
 
 FSM:
   _: # enabled fsms —— 在此处注册所有启用的状态
@@ -42,18 +44,14 @@ FSM:
     Velocity:
       id: 3
       type: RLBase
-    # AMP 运行策略：速度指令驱动 + 4帧历史观测，同 RLBase 类型
-    AMP:
-      id: 5
-      type: RLBase
-    # ---- 示例：再新增一个策略状态（以 type: RLBase 为例）----
-    # MyNewPolicy:
-    #   id: 6          # 唯一 id，不要与现有 id 重复
-    #   type: RLBase   # RLBase / Mimic / 自定义 State 名
-    # --------------------------------------------------
+    # PHP 感知跑酷（学生 + 深度骨干双 ONNX，深度走 shm）
+    # id 4 = 设计时预留给自定义策略的序号，对应键盘 d
+    Php:
+      id: 4
+      type: Php
 
   Passive:
-    transitions: 
+    transitions:
       FixStand: LT + up.on_pressed
     mode: [
       1,1,1,1,1,1,
@@ -66,15 +64,15 @@ FSM:
       3,3,3,3,3,3,
       3,3,3,3,3,3,
       3,3,3,
-      3,3,3,3,3,3,3,  
-      3,3,3,3,3,3,3,  
+      3,3,3,3,3,3,3,
+      3,3,3,3,3,3,3,
     ]
 
   FixStand:
-    transitions: 
+    transitions:
       Passive: LT + B.on_pressed
       Velocity: RT + A.on_pressed
-      AMP: RB + X.on_pressed
+      Php: RB + Y.on_pressed
     kp: [
       100,100,100,150,40,40,
       100,100,100,150,40,40,
@@ -100,30 +98,26 @@ FSM:
       ]
     ]
 
-  # ---- 示例：RLBase 类型策略（速度控制等，无需参考轨迹）----
-  # transitions:  手柄/按键条件 -> 目标状态，格式：<目标状态名>: <触发条件>
-  # policy_dir:   策略目录（exported/ 与 params/ 的父目录），不含前导 ./ 或 ~
+  # ---- 公共速度控制策略 ----
   Velocity:
-    transitions: 
+    transitions:
       Passive: LT + B.on_pressed
       FixStand: LT + up.on_pressed
-      AMP: RB + X.on_pressed
+      Php: RB + Y.on_pressed
     policy_dir: config/policy/velocity
 
-  # ---- AMP 运行策略（type: RLBase，速度指令驱动 + 4帧历史）----
-  # 手柄 RB + X 从 Velocity / FixStand 切入，速度用左摇杆 + 右摇杆 yaw 控制
-  AMP:
+  # ---- PHP 感知跑酷策略（type: Php -> State_Php）----
+  # 键盘 d 或 手柄 RB + Y 切入；进入时指令为 0（站立），
+  # 之后用方向键 / 摇杆切换方向（与 Velocity 同一套 toggle 设计，再按一下归零）
+  Php:
     transitions:
       Passive: LT + B.on_pressed
       FixStand: LT + up.on_pressed
       Velocity: RT + A.on_pressed
-    policy_dir: config/policy/AMP
-  #  enable_bad_orientation_check: true
-  #  recovery_gate:
-  #    target: Passive
-  #    max_tilt: 0.30
-  #    max_root_ang_vel: 1.0
-  #    confirm_ms: 500
+    policy_dir: config/policy/php
+    debug_log: false       # true -> 每秒打印 cmd / depth / knee / |a|max / angvel
+    disable_depth: false   # true -> 喂零深度 latent（A/B 测试用）
+    gravity_mode: torso    # torso(训练一致) | pelvis(与 Velocity 一致)
 
 # =====================================================================
 #  健康日志 (g1_health_logger)
@@ -136,4 +130,3 @@ health_log:
   print_hz: 1.0
   ring_seconds: 30.0
   enable_bms: true
-

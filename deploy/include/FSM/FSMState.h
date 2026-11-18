@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include "Types.h"
 #include "param.h"
 #include "FSM/BaseState.h"
@@ -67,4 +69,7 @@ public:
     static std::unique_ptr<LowCmd_t> lowcmd;
     static std::shared_ptr<LowState_t> lowstate;
     static std::shared_ptr<Keyboard> keyboard;
+
+    // 请求 CtrlFSM 清空“键盘模拟摇杆”（状态 enter() 时可置 true，例如进入策略时希望默认站立）
+    static inline std::atomic<bool> reset_joystick_request{false};
 };
