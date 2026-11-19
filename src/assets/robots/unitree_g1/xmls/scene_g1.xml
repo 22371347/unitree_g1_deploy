@@ -147,9 +147,18 @@
             <geom pos="0.0039635 0 -0.044" type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.2 0.2 0.2 1" mesh="head_link"/>
             <geom pos="0.0039635 0 -0.044" type="mesh" rgba="0.2 0.2 0.2 1" mesh="head_link"/>
             <site name="imu_in_torso" size="0.01" pos="-0.03959 -0.00224 0.14792"/>
+            <!-- ===== D435i 深度相机（与 holosoma 训练/仿真完全同一标定）=====
+                 torso 局部系 offset_pos=(0.01,0.01,0.44)，offset_rot=(1°,27°,1°)，
+                 offset_rot_base=(-90°,0°,-90°) 合成后的 MuJoCo 相机四元数（wxyz）；
+                 fovy=58.5953° <=> 106x60 下的 HFOV 89.5°。
+                 深度由 mjr_render + mjr_readPixels 直接渲染（与官方同一条代码路径），
+                 因此自动包含机器人自身近场几何（躯干/手臂），不再排除 torso。 -->
+            <camera name="d435i_depth" pos="0.01 0.01 0.44"
+                    quat="0.60290764 0.37585401 -0.362958 -0.60290764"
+                    fovy="58.5953"/>
             <!-- ===== 深度相机探测范围可视化（D435i: HFOV 89.5°, near 0.3/far 3.0, 附于 torso z+0.44m 下俯 27°）=====
                  group=4 + contype/conaffinity=0 + density=0 : 仅可视化，不参与碰撞；
-                 深度射线 mask 仅含 group0/1，故不会把视锥当成障碍物。 -->
+                 深度渲染只画 group0/1，故不会把视锥当成障碍物。 -->
             <body name="depth_fov" pos="0.01 0.01 0.44" quat="0.375854 -0.602908 0.602908 -0.362958">
               <inertial pos="0 0 0" mass="0.001" diaginertia="1e-6 1e-6 1e-6"/>
               <!-- 远端矩形四条边 -->
@@ -589,10 +598,25 @@
     <!-- 1)~5) 旧测试障碍（低台阶/中箱/高箱/圆木/坡道）已按需求移除，避免挡路。
          如需要请从版本库恢复，或改用下方实物软垫。 -->
 
-    <!-- ===== 实物越障软垫（与实测一致：2 块 0.5×0.5m 软垫并排）=====
-         整体尺寸：左右(y) 1.0m × 前后(x) 0.5m × 高(z) 0.3m
-         每块半尺寸 (0.25,0.25,0.15)，位于 y=±0.25，中心 x=1.6（机器人正前方，深度相机远场可见） -->
-    <geom type="box" name="pad_left"  pos="1.6 -0.25 0.15" size="0.25 0.25 0.15" rgba="0.25 0.55 0.85 1" friction="1.2 0.02 0.001"/>
-    <geom type="box" name="pad_right" pos="1.6  0.25 0.15" size="0.25 0.25 0.15" rgba="0.25 0.55 0.85 1" friction="1.2 0.02 0.001"/>
+    <!-- ===== 实物软垫堆（与实验室实测一致：1x1 m 软垫摞起来）=====
+         实测结论（2026-11-19）：
+           * 0.30 m：策略不响应，直接走过——太低
+           * 0.40 m：能成功看到并越上  ← 当前采用
+         改高度：高度 = 2 * size_z，且 pos 的 z 必须等于 size_z（否则会埋进地面）：
+            0.30 m -> size_z 0.15, pos z 0.15
+            0.38 m -> size_z 0.19, pos z 0.19   (训练 terrain.obj 第一级)
+            0.40 m -> size_z 0.20, pos z 0.20   ← 当前
+         前沿在 x = 1.6 - size_x = 1.1 m（深度相机 3 m ~ 0.6 m 之间可见）
+         若两块并排：size 的 y 改成 1.0（2 m 宽）；往 +x 摞两块：size_x 改成 1.0 且 pos x 改 2.1 -->
+    <geom type="box" name="php_pad_stack" pos="1.6 0 0.2" size="0.5 0.5 0.2"
+          rgba="0.25 0.55 0.85 1" friction="1.2 0.02 0.001"/>
+
+    <!-- 参照：训练 terrain.obj 第一级台阶（0.38 m 高 / 1.8 m 宽 / 46 m 长） -->
+    <!-- <geom type="box" name="php_platform" pos="3.1 0 0.19" size="1.5 0.9 0.19"
+              rgba="0.25 0.55 0.85 1" friction="1.2 0.02 0.001"/> -->
+
+    <!-- 旧版两块 0.5x0.5m 软垫（0.30 m 高），复现历史测试时取消注释 -->
+    <!-- <geom type="box" name="pad_left"  pos="1.6 -0.25 0.15" size="0.25 0.25 0.15" rgba="0.25 0.55 0.85 1" friction="1.2 0.02 0.001"/> -->
+    <!-- <geom type="box" name="pad_right" pos="1.6  0.25 0.15" size="0.25 0.25 0.15" rgba="0.25 0.55 0.85 1" friction="1.2 0.02 0.001"/> -->
   </worldbody>
 </mujoco>

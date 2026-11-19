@@ -337,12 +337,24 @@ cd deploy/robots/g1/build
 
 - **观测构成**：`[ actions(29), base_ang_vel(3), dof_pos(29), dof_vel(29), projected_gravity(3) ]`（共 93）
   `+ velocity_command(15) + depth_latent(32) = 140`；`time_step` 恒为 0。
-  深度来自 `/dev/shm/depth_raw_shm`：`unitree_mujoco` 以 10Hz 发布 `106×60` 原始平面深度
-  （torso_link 前向、D435i 参数：HFOV 89.5°，near 0.3 / far 3.0 m）。
-- **实物越障软垫**：`scene_g1.xml` 中 `pad_left` / `pad_right`（2 块 0.5×0.5m 并排 = 左右 1.0m × 前后 0.5m × 高 0.3m），
-  中心 `x=1.6m`（机器人正前方）。
+- **深度采集（与 holosoma 官方 sim2sim 同一路径）**：`scene_g1.xml` 中 `torso_link` 下的
+  `<camera name="d435i_depth">`（`pos="0.01 0.01 0.44"`、D435i 训练标定四元数、`fovy=58.5953°`），
+  `unitree_mujoco` 用隐藏 GLFW 上下文离屏渲染（`mjr_render` + `mjr_readPixels`，reverse-Z 反解成米制
+  z 深度），以 10Hz 把 `106×60` 原始平面深度写入 `/dev/shm/depth_raw_shm`。
+  - 用**渲染**而非射线投射，是为了让画面里包含机器人自身的近场几何（胸口/手臂/大腿）——
+    训练时就是这样的分布；用 `mj_multiRay` 时相机在躯干网格内部必须排除 torso，
+    会丢掉约 8% 的近场像素，导致策略步态偏保守（长距离前进时会逐渐下蹲）。
+  - 深度单位/定义/内外参/预处理与官方逐项对齐，实测同姿态下 C++ 输出与 `mujoco.Renderer`
+    的结果逐像素一致（`mean|diff| = 0.0000`）。
+- **实物越障软垫**：`scene_g1.xml` 中 `php_pad_stack`（1×1 m 软垫堆，前沿 `x=1.1m`）。
+  **实测高度结论（2026-11-19）**：
+  | 高度 | 表现 |
+  |---|---|
+  | 0.30 m | 策略不响应，直接走过（太低） |
+  | **0.40 m** | **能成功看到并越上 ← 当前采用** |
+  改高度：`size` 第 3 个数 = 高度/2，且 `pos` 的 z 必须等于该值（否则会埋进地面）。
 - **深度相机探测范围可视化**：`torso_link` 下的 `depth_fov` 子体（橙色半透明视锥，near0.3~far3.0）。
-  它位于 geom **group 4**，而深度射线只取 **group 0/1**，因此不会被当成障碍物（否则会在相机处“糊屏”）。
+  它位于 geom **group 4**，深度渲染时通过 `mjvOption.geomgroup[4]=0` 排除，因此不会被当成障碍物。
   在 MuJoCo 查看器中可按需切换显示 geom 分组。
 
 > [!NOTE]

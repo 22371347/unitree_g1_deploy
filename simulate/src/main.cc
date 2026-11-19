@@ -690,6 +690,11 @@ int main(int argc, char **argv)
     std::make_unique<mj::GlfwAdapter>(),
     &cam, &opt, &pert, /* is_passive = */ false);
 
+  // Depth camera: create the hidden offscreen GL context on the main thread
+  // (GLFW is initialised by the adapter above) before the physics thread starts;
+  // the physics thread takes ownership of it in depth_camera::Init().
+  depth_camera::PrepareContext();
+
   std::thread unitree_thread(UnitreeSdk2BridgeThread, nullptr);
 
   // start physics thread
